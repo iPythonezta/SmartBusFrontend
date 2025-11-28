@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { dashboardApi, busesApi } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Bus, Route, MapPin, Monitor, Activity, AlertCircle } from 'lucide-react';
-import { MapCanvas } from '@/components/map/MapCanvas';
+import { MapboxMap } from '@/components/map/MapboxMap';
 
 const DashboardPage: React.FC = () => {
   const { t } = useTranslation();
@@ -116,7 +116,7 @@ const DashboardPage: React.FC = () => {
               <p className="text-muted-foreground">{t('common.loading')}</p>
             </div>
           ) : (
-            <MapCanvas
+            <MapboxMap
               initialViewState={{
                 longitude: 73.0479,
                 latitude: 33.6844,
