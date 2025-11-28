@@ -1,9 +1,10 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Bus } from '@/types';
-import { motion } from 'framer-motion';
+import { realtimeService } from '@/services/realtime';
+import { routingService } from '@/services/routing';
 
 // Fix Leaflet default marker icon issue
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -67,19 +68,177 @@ function MapViewController({ center, zoom }: { center: [number, number]; zoom: n
   return null;
 }
 
+// Component to handle real-time bus location updates
+function RealtimeBusMarkers({ buses }: { buses: Bus[] }) {
+  const map = useMap();
+  const markersRef = useRef<Map<string, L.Marker>>(new Map());
+
+  useEffect(() => {
+    const unsubscribes: (() => void)[] = [];
+
+    // Subscribe to real-time updates for each bus
+    buses.forEach(bus => {
+      if (bus.last_location && bus.status === 'active') {
+        const unsubscribe = realtimeService.subscribe(bus.id, (_busId, location) => {
+          const marker = markersRef.current.get(bus.id);
+          if (marker) {
+            // Update marker position without re-rendering
+            const newLatLng = L.latLng(location.latitude, location.longitude);
+            marker.setLatLng(newLatLng);
+            
+            // Update popup content
+            const popupContent = `
+              <div class="text-sm">
+                <p class="font-bold">${bus.registration_number}</p>
+                <p>Speed: ${location.speed} km/h</p>
+                <p class="capitalize">Status: ${bus.status}</p>
+                ${bus.assigned_route ? `<p>Route: ${bus.assigned_route.name}</p>` : ''}
+              </div>
+            `;
+            marker.getPopup()?.setContent(popupContent);
+          }
+        });
+        unsubscribes.push(unsubscribe);
+      }
+    });
+
+    return () => {
+      unsubscribes.forEach(unsub => unsub());
+    };
+  }, [buses]);
+
+  // Initial render of markers
+  useEffect(() => {
+    // Clear old markers
+    markersRef.current.forEach(marker => marker.remove());
+    markersRef.current.clear();
+
+    // Create new markers
+    buses.forEach(bus => {
+      if (bus.last_location) {
+        const icon = createBusIcon(bus.last_location.speed, bus.status === 'active');
+        const marker = L.marker(
+          [bus.last_location.latitude, bus.last_location.longitude],
+          { icon }
+        ).addTo(map);
+
+        const popupContent = `
+          <div class="text-sm">
+            <p class="font-bold">${bus.registration_number}</p>
+            <p>Speed: ${bus.last_location.speed} km/h</p>
+            <p class="capitalize">Status: ${bus.status}</p>
+            ${bus.assigned_route ? `<p>Route: ${bus.assigned_route.name}</p>` : ''}
+          </div>
+        `;
+        marker.bindPopup(popupContent);
+        markersRef.current.set(bus.id, marker);
+      }
+    });
+
+    return () => {
+      markersRef.current.forEach(marker => marker.remove());
+      markersRef.current.clear();
+    };
+  }, [buses, map]);
+
+  return null;
+}
+
+// Component to render route polyline with actual road-based routing
+function SmartRoutePolyline({ 
+  geometry, 
+  color, 
+  weight = 4, 
+  opacity = 0.8 
+}: { 
+  geometry: { type: 'LineString'; coordinates: number[][] };
+  color: string;
+  weight?: number;
+  opacity?: number;
+}) {
+  const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchRoute = async () => {
+      setIsLoading(true);
+      
+      // Convert from [lng, lat] to [lat, lng]
+      const points = geometry.coordinates.map(
+        coord => [coord[1], coord[0]] as [number, number]
+      );
+
+      if (points.length < 2) {
+        setRouteCoordinates(points);
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        // Fetch the actual road-based route
+        const coordinates = await routingService.getRoute(points);
+        setRouteCoordinates(coordinates);
+      } catch (error) {
+        console.error('Error fetching route:', error);
+        // Fallback to straight lines
+        setRouteCoordinates(points);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchRoute();
+  }, [geometry.coordinates]);
+
+  if (isLoading || routeCoordinates.length < 2) {
+    return null;
+  }
+
+  return (
+    <Polyline
+      positions={routeCoordinates}
+      pathOptions={{
+        color,
+        weight,
+        opacity,
+      }}
+    />
+  );
+}
+
 // Create custom icons
 const createCustomIcon = (color: string, label?: string) => {
   return L.divIcon({
     className: 'custom-marker',
     html: `
-      <div class="relative flex items-center justify-center" style="width: 40px; height: 40px;">
-        <div class="absolute inset-0 rounded-full animate-ping opacity-75" style="background-color: ${color};"></div>
-        <div class="relative z-10 rounded-full border-4 border-white shadow-lg" style="background-color: ${color}; width: 32px; height: 32px;"></div>
-        ${label ? `<div class="absolute -bottom-6 left-1/2 transform -translate-x-1/2 whitespace-nowrap bg-white px-2 py-1 rounded shadow-md text-xs font-medium">${label}</div>` : ''}
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center;">
+        <div style="
+          width: 14px;
+          height: 14px;
+          background: ${color};
+          border: 3px solid white;
+          border-radius: 50%;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        "></div>
+        ${label ? `
+          <div style="
+            margin-top: 4px;
+            padding: 2px 8px;
+            background: white;
+            border: 1px solid ${color};
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            color: ${color};
+            white-space: nowrap;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            font-family: system-ui, -apple-system, sans-serif;
+          ">${label}</div>
+        ` : ''}
       </div>
     `,
-    iconSize: [40, 40],
-    iconAnchor: [20, 20],
+    iconSize: [120, 40],
+    iconAnchor: [60, 14],
   });
 };
 
@@ -128,11 +287,6 @@ export const MapCanvas: React.FC<MapCanvasProps> = ({
 }) => {
   const center: [number, number] = [initialViewState.latitude, initialViewState.longitude];
 
-  // Convert route coordinates from [lng, lat] to [lat, lng] for Leaflet
-  const routePositions = routePolyline?.geometry.coordinates.map(
-    (coord) => [coord[1], coord[0]] as [number, number]
-  );
-
   return (
     <div style={{ width: '100%', height }} className="rounded-2xl overflow-hidden border border-gray-200 shadow-lg">
       <MapContainer
@@ -151,15 +305,13 @@ export const MapCanvas: React.FC<MapCanvasProps> = ({
         <MapClickHandler onClick={onClick} />
         <MapViewController center={center} zoom={initialViewState.zoom} />
 
-        {/* Route Polyline */}
-        {routePositions && routePositions.length > 0 && (
-          <Polyline
-            positions={routePositions}
-            pathOptions={{
-              color: routePolyline?.properties?.color || '#14b8a6',
-              weight: 4,
-              opacity: 0.8,
-            }}
+        {/* Route Polyline with actual road-based routing */}
+        {routePolyline && (
+          <SmartRoutePolyline
+            geometry={routePolyline.geometry}
+            color={routePolyline.properties?.color || '#14b8a6'}
+            weight={5}
+            opacity={0.8}
           />
         )}
 
@@ -189,27 +341,8 @@ export const MapCanvas: React.FC<MapCanvasProps> = ({
           );
         })}
 
-        {/* Bus Markers */}
-        {buses.map((bus) =>
-          bus.last_location ? (
-            <Marker
-              key={bus.id}
-              position={[bus.last_location.latitude, bus.last_location.longitude]}
-              icon={createBusIcon(bus.last_location.speed, bus.status === 'active')}
-            >
-              <Popup>
-                <div className="text-sm">
-                  <p className="font-bold">{bus.registration_number}</p>
-                  <p>Speed: {bus.last_location.speed} km/h</p>
-                  <p className="capitalize">Status: {bus.status}</p>
-                  {bus.assigned_route && (
-                    <p>Route: {bus.assigned_route.name}</p>
-                  )}
-                </div>
-              </Popup>
-            </Marker>
-          ) : null
-        )}
+        {/* Real-time Bus Markers - Updates positions without re-rendering parent */}
+        <RealtimeBusMarkers buses={buses} />
       </MapContainer>
     </div>
   );

@@ -98,7 +98,8 @@ export interface BusETA {
 export interface CreateBusInput {
   registration_number: string;
   capacity: number;
-  status?: 'active' | 'inactive';
+  status?: 'active' | 'inactive' | 'maintenance';
+  assigned_route_id?: string;
 }
 
 // Display Unit types

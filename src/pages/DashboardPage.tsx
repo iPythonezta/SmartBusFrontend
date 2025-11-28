@@ -1,9 +1,10 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import { dashboardApi } from '@/services/api';
+import { dashboardApi, busesApi } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Bus, Route, MapPin, Monitor, Activity, AlertCircle } from 'lucide-react';
+import { MapCanvas } from '@/components/map/MapCanvas';
 
 const DashboardPage: React.FC = () => {
   const { t } = useTranslation();
@@ -11,6 +12,11 @@ const DashboardPage: React.FC = () => {
   const { data: stats, isLoading } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: () => dashboardApi.getStats(),
+  });
+
+  const { data: buses, isLoading: busesLoading } = useQuery({
+    queryKey: ['buses'],
+    queryFn: () => busesApi.getBuses(),
   });
 
   const statCards = [
@@ -105,9 +111,23 @@ const DashboardPage: React.FC = () => {
           <CardTitle>{t('dashboard.liveMap')}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-96 bg-muted rounded-xl flex items-center justify-center">
-            <p className="text-muted-foreground">{t('common.loading')}</p>
-          </div>
+          {busesLoading ? (
+            <div className="h-96 bg-muted rounded-xl flex items-center justify-center">
+              <p className="text-muted-foreground">{t('common.loading')}</p>
+            </div>
+          ) : (
+            <MapCanvas
+              initialViewState={{
+                longitude: 73.0479,
+                latitude: 33.6844,
+                zoom: 12,
+              }}
+              buses={buses?.filter(b => b.last_location) || []}
+              height="384px"
+              interactive={true}
+              showControls={true}
+            />
+          )}
         </CardContent>
       </Card>
     </div>

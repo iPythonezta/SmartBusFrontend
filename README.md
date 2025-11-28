@@ -60,15 +60,21 @@ src/
 
 ## 🔑 Environment Variables
 
-Create `.env` file (optional - all features work with demo data):
+Create `.env` file (optional - most features work with demo data):
 
 ```env
 VITE_API_URL=http://localhost:8000/api
 VITE_I18N_DEFAULT=en
 VITE_WS_URL=ws://localhost:8000
+# Optional: For Mapbox static map in bus live location
+VITE_MAPBOX_API_KEY=your_mapbox_access_token
 ```
 
-**Note**: No map API keys required! We use Leaflet with OpenStreetMap tiles.
+**Notes**: 
+- No map API keys required for Leaflet maps (stops, routes, dashboard)!
+- Mapbox access token is optional - used only for bus live location static map in Bus Detail page
+- Get your free Mapbox token from [Mapbox Account](https://account.mapbox.com/access-tokens/)
+- **Free tier**: 200,000 static image requests/month (more than enough!)
 
 ## 📱 Pages & Routes
 

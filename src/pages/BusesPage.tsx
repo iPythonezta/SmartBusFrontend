@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -8,10 +8,12 @@ import { Button } from '@/components/ui/button';
 import { Plus, Eye, Navigation, Activity } from 'lucide-react';
 import { cn, formatDateTime } from '@/lib/utils';
 import { motion } from 'framer-motion';
+import { BusModal } from '@/components/modals/BusModal';
 
 const BusesPage: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [showAddModal, setShowAddModal] = useState(false);
   
   const { data: buses, isLoading } = useQuery({
     queryKey: ['buses'],
@@ -66,7 +68,7 @@ const BusesPage: React.FC = () => {
           <h1 className="text-3xl font-bold">{t('buses.title')}</h1>
           <p className="text-muted-foreground mt-1">Manage your fleet of buses</p>
         </div>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={() => setShowAddModal(true)}>
           <Plus className="h-4 w-4" />
           {t('buses.addBus')}
         </Button>
@@ -197,6 +199,8 @@ const BusesPage: React.FC = () => {
           </CardContent>
         </Card>
       ) : null}
+
+      <BusModal open={showAddModal} onClose={() => setShowAddModal(false)} />
     </div>
   );
 };
