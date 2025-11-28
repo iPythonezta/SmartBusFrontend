@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -7,10 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Plus, Eye, MapPin, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { RouteModal } from '@/components/modals/RouteModal';
 
 const RoutesPage: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [showAddModal, setShowAddModal] = useState(false);
   
   const { data: routes, isLoading } = useQuery({
     queryKey: ['routes'],
@@ -52,11 +54,16 @@ const RoutesPage: React.FC = () => {
           <h1 className="text-3xl font-bold">{t('routes.title')}</h1>
           <p className="text-muted-foreground mt-1">Manage bus routes and stops</p>
         </div>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={() => setShowAddModal(true)}>
           <Plus className="h-4 w-4" />
           {t('routes.addRoute')}
         </Button>
       </div>
+
+      <RouteModal
+        open={showAddModal}
+        onClose={() => setShowAddModal(false)}
+      />
 
       {/* Routes Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

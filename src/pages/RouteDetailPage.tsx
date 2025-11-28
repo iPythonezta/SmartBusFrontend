@@ -1,11 +1,28 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { routesApi, busesApi } from '@/services/api';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { routesApi, busesApi, stopsApi } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Route as RouteIcon, MapPin, Bus } from 'lucide-react';
-import { MapCanvas } from '@/components/map';
+import { ArrowLeft, Route as RouteIcon, MapPin, Bus, Plus, Trash2, Loader2 } from 'lucide-react';
+import { MapboxMap } from '@/components/map/MapboxMap';
+import { RouteModal } from '@/components/modals/RouteModal';
+import { toast } from '@/components/ui/use-toast';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   DndContext,
   closestCenter,
@@ -74,7 +91,12 @@ const SortableStopItem: React.FC<SortableStopItemProps> = ({ stop, index }) => {
 const RouteDetailPageEnhanced: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [sortedStops, setSortedStops] = React.useState<RouteStop[]>([]);
+  const queryClient = useQueryClient();
+  const [sortedStops, setSortedStops] = useState<RouteStop[]>([]);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showManageStopsDialog, setShowManageStopsDialog] = useState(false);
+  const [selectedStopToAdd, setSelectedStopToAdd] = useState<string>('');
 
   const { data: route, isLoading: routeLoading } = useQuery({
     queryKey: ['route', id],
@@ -87,7 +109,17 @@ const RouteDetailPageEnhanced: React.FC = () => {
     queryFn: () => busesApi.getBuses(),
   });
 
+  const { data: allStops } = useQuery({
+    queryKey: ['stops'],
+    queryFn: () => stopsApi.getStops(),
+  });
+
   const assignedBuses = buses?.filter((b) => b.assigned_route_id === id);
+
+  // Get available stops (not already in this route)
+  const availableStops = allStops?.filter(
+    (stop) => !sortedStops.some((rs) => rs.stop_id === stop.id)
+  );
 
   // Initialize sorted stops
   React.useEffect(() => {
@@ -98,6 +130,57 @@ const RouteDetailPageEnhanced: React.FC = () => {
       setSortedStops(sorted);
     }
   }, [route]);
+
+  // Delete route mutation
+  const deleteMutation = useMutation({
+    mutationFn: () => routesApi.deleteRoute(id!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['routes'] });
+      toast({
+        title: 'Success',
+        description: 'Route deleted successfully',
+      });
+      navigate('/routes');
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to delete route',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Add stop to route mutation
+  const addStopMutation = useMutation({
+    mutationFn: ({ stopId }: { stopId: string }) =>
+      routesApi.addStopToRoute(id!, stopId, sortedStops.length + 1),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['route', id] });
+      toast({
+        title: 'Success',
+        description: 'Stop added to route',
+      });
+      setSelectedStopToAdd('');
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to add stop',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const handleDeleteRoute = () => {
+    deleteMutation.mutate();
+  };
+
+  const handleAddStop = () => {
+    if (selectedStopToAdd) {
+      addStopMutation.mutate({ stopId: selectedStopToAdd });
+    }
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -151,31 +234,10 @@ const RouteDetailPageEnhanced: React.FC = () => {
     );
   }
 
-  // Generate polyline from stops
-  const routePolyline = sortedStops.length > 0
-    ? {
-        type: 'Feature' as const,
-        geometry: {
-          type: 'LineString' as const,
-          coordinates: sortedStops.map((rs) => [
-            rs.stop!.longitude,
-            rs.stop!.latitude,
-          ]),
-        },
-        properties: {
-          color: route.color || '#14b8a6',
-        },
-      }
-    : undefined;
-
-  // Generate markers for stops
-  const stopMarkers = sortedStops.map((rs, idx) => ({
-    id: rs.id,
-    longitude: rs.stop!.longitude,
-    latitude: rs.stop!.latitude,
-    color: route.color || '#14b8a6',
-    label: `${idx + 1}. ${rs.stop!.name}`,
-  }));
+  // Get stops for the map
+  const mapStops = sortedStops
+    .filter(rs => rs.stop)
+    .map(rs => rs.stop!);
 
   return (
     <div className="space-y-6">
@@ -249,16 +311,18 @@ const RouteDetailPageEnhanced: React.FC = () => {
           <CardTitle>Route Visualization</CardTitle>
         </CardHeader>
         <CardContent>
-          <MapCanvas
+          <MapboxMap
             initialViewState={{
               longitude: sortedStops[0]?.stop?.longitude || 73.0479,
               latitude: sortedStops[0]?.stop?.latitude || 33.6844,
               zoom: 12,
             }}
-            markers={stopMarkers}
-            routePolyline={routePolyline}
+            stops={mapStops}
+            showRoute={mapStops.length >= 2}
+            routeColor={route.color || '#14b8a6'}
             height="500px"
-            interactive={false}
+            interactive={true}
+            showControls={true}
           />
         </CardContent>
       </Card>
@@ -324,12 +388,146 @@ const RouteDetailPageEnhanced: React.FC = () => {
       )}
 
       <div className="flex gap-3">
-        <Button variant="outline">Edit Route</Button>
-        <Button variant="outline">Manage Stops</Button>
-        <Button variant="destructive" className="ml-auto">
+        <Button variant="outline" onClick={() => setShowEditModal(true)}>
+          Edit Route
+        </Button>
+        <Button variant="outline" onClick={() => setShowManageStopsDialog(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Manage Stops
+        </Button>
+        <Button
+          variant="destructive"
+          className="ml-auto"
+          onClick={() => setShowDeleteDialog(true)}
+        >
+          <Trash2 className="h-4 w-4 mr-2" />
           Delete Route
         </Button>
       </div>
+
+      {/* Edit Route Modal */}
+      <RouteModal
+        open={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        route={route}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Route</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{route?.name}"? This action cannot be undone.
+              All stops will be unassigned from this route.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteRoute}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete Route
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage Stops Dialog */}
+      <Dialog open={showManageStopsDialog} onOpenChange={setShowManageStopsDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Manage Route Stops</DialogTitle>
+            <DialogDescription>
+              Add or remove stops from this route. Drag stops in the list above to reorder them.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Add New Stop */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Add a Stop</label>
+              <div className="flex gap-2">
+                <Select value={selectedStopToAdd} onValueChange={setSelectedStopToAdd}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Select a stop to add..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableStops?.map((stop) => (
+                      <SelectItem key={stop.id} value={stop.id}>
+                        {stop.name}
+                      </SelectItem>
+                    ))}
+                    {(!availableStops || availableStops.length === 0) && (
+                      <SelectItem value="none" disabled>
+                        No more stops available
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                <Button
+                  onClick={handleAddStop}
+                  disabled={!selectedStopToAdd || addStopMutation.isPending}
+                >
+                  {addStopMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Current Stops */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Current Stops ({sortedStops.length})</label>
+              <div className="max-h-64 overflow-y-auto space-y-2">
+                {sortedStops.map((rs, index) => (
+                  <div
+                    key={rs.id}
+                    className="flex items-center justify-between p-2 border rounded-lg bg-muted/30"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-center justify-center h-6 w-6 rounded-full bg-teal-100 text-teal-700 font-bold text-xs">
+                        {index + 1}
+                      </span>
+                      <span className="text-sm">{rs.stop?.name}</span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                      onClick={() => {
+                        // Remove stop from route (would call API in real app)
+                        toast({
+                          title: 'Info',
+                          description: 'Remove stop functionality coming soon',
+                        });
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                {sortedStops.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No stops added yet. Add some stops to define the route.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button onClick={() => setShowManageStopsDialog(false)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
