@@ -202,7 +202,7 @@ export const MapboxMap: React.FC<MapboxMapProps> = ({
 
   // Add/update stop markers - Only re-run when stop IDs change, not when objects change
   useEffect(() => {
-    if (!map.current || !mapLoaded || !showRoute) return;
+    if (!map.current || !mapLoaded || stops.length === 0) return;
 
     // Remove old stop markers that are no longer in the list
     const currentStopIds = new Set(stops.map(s => s.id));
@@ -246,7 +246,7 @@ export const MapboxMap: React.FC<MapboxMapProps> = ({
         stopMarkers.current.set(stop.id, marker);
       }
     });
-  }, [stops.map(s => s.id).join(','), mapLoaded, showRoute, routeColor]); // Only re-run when stop IDs change
+  }, [stops.map(s => s.id).join(','), mapLoaded, routeColor]); // Only re-run when stop IDs change
 
   // Draw route polyline with actual road-based routing - Only re-run when stop IDs/coordinates change
   useEffect(() => {

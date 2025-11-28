@@ -5,9 +5,10 @@ import { stopsApi } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, MapPin, Search, Navigation } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Plus, MapPin, Search, Navigation, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { StopModal } from '@/components/modals/StopModal';
+import { MapboxMap } from '@/components/map/MapboxMap';
 import type { Stop } from '@/types';
 
 const StopsPage: React.FC = () => {
@@ -16,6 +17,7 @@ const StopsPage: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedStop, setSelectedStop] = useState<Stop | undefined>();
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
+  const [viewingStop, setViewingStop] = useState<Stop | null>(null);
   
   const { data: stops, isLoading } = useQuery({
     queryKey: ['stops'],
@@ -142,7 +144,12 @@ const StopsPage: React.FC = () => {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="flex-1">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => setViewingStop(stop)}
+                  >
                     View on Map
                   </Button>
                   <Button
@@ -177,6 +184,71 @@ const StopsPage: React.FC = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* View on Map Modal */}
+      <AnimatePresence>
+        {viewingStop && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+            onClick={() => setViewingStop(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-lg shadow-xl w-full max-w-3xl overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between p-4 border-b">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 bg-teal-100 rounded-lg flex items-center justify-center">
+                    <MapPin className="h-5 w-5 text-teal-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-lg">{viewingStop.name}</h3>
+                    {viewingStop.description && (
+                      <p className="text-sm text-muted-foreground">{viewingStop.description}</p>
+                    )}
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setViewingStop(null)}
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+              <div className="h-[400px]">
+                <MapboxMap
+                  initialViewState={{
+                    longitude: viewingStop.longitude,
+                    latitude: viewingStop.latitude,
+                    zoom: 15,
+                  }}
+                  stops={[viewingStop]}
+                  showRoute={false}
+                  routeColor="#14b8a6"
+                  height="100%"
+                  interactive={true}
+                  showControls={true}
+                />
+              </div>
+              <div className="p-4 border-t bg-gray-50">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Navigation className="h-4 w-4" />
+                  <span className="font-mono">
+                    {viewingStop.latitude.toFixed(6)}, {viewingStop.longitude.toFixed(6)}
+                  </span>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <StopModal
         open={modalOpen}
