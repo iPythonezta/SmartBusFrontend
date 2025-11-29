@@ -43,8 +43,12 @@ const TopNav: React.FC = () => {
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent">
             <User className="h-5 w-5" />
             <div className="flex flex-col">
-              <span className="text-sm font-medium">{user?.name}</span>
-              <span className="text-xs text-muted-foreground capitalize">{user?.role}</span>
+              <span className="text-sm font-medium">
+                {user?.first_name} {user?.last_name}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {user?.user_type === 'ADMIN' ? 'Admin' : 'Staff'}
+              </span>
             </div>
           </div>
           <Button variant="ghost" size="icon" onClick={logout}>

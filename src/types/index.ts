@@ -1,21 +1,29 @@
 // User & Auth types
+export type UserType = 'ADMIN' | 'STAFF';
+
 export interface User {
-  id: string;
-  name: string;
+  id: number;
   email: string;
-  role: 'admin' | 'staff';
-  created_at: string;
+  first_name: string;
+  last_name: string;
+  user_type: UserType;
 }
 
 export interface AuthResponse {
-  access_token: string;
-  refresh_token: string;
-  user: User;
+  token: string;
 }
 
 export interface LoginCredentials {
   email: string;
   password: string;
+}
+
+export interface RegisterUserInput {
+  email: string;
+  password: string;
+  first_name: string;
+  last_name: string;
+  user_type: UserType;
 }
 
 // Stop types

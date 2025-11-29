@@ -79,11 +79,6 @@ const LoginPage: React.FC = () => {
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? t('auth.loggingIn') : t('auth.login')}
             </Button>
-            <div className="text-center">
-              <a href="#" className="text-sm text-muted-foreground hover:text-primary">
-                {t('auth.forgotPassword')}
-              </a>
-            </div>
           </form>
         </CardContent>
       </Card>

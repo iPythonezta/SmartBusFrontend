@@ -33,22 +33,28 @@ const SettingsPage: React.FC = () => {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
-              <Input id="name" defaultValue={user?.name} />
+              <Label htmlFor="first_name">First Name</Label>
+              <Input id="first_name" defaultValue={user?.first_name} />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="last_name">Last Name</Label>
+              <Input id="last_name" defaultValue={user?.last_name} />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input id="email" type="email" defaultValue={user?.email} disabled className="bg-muted" />
             </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="role">Role</Label>
-            <Input 
-              id="role" 
-              defaultValue={user?.role} 
-              disabled 
-              className="bg-muted capitalize" 
-            />
+            <div className="space-y-2">
+              <Label htmlFor="role">Role</Label>
+              <Input 
+                id="role" 
+                defaultValue={user?.user_type === 'ADMIN' ? 'Administrator' : 'Staff'} 
+                disabled 
+                className="bg-muted" 
+              />
+            </div>
           </div>
           <Button className="gap-2">
             <Save className="h-4 w-4" />

@@ -1,9 +1,11 @@
-// Mock API for demo - replace with real API calls when backend is ready
+// API Services - Uses real API for auth/users, mock for other features
 import { mockApi } from './mockApi';
+import { apiClient } from '@/lib/api-client';
 import type {
   AuthResponse,
   LoginCredentials,
   User,
+  RegisterUserInput,
   Stop,
   CreateStopInput,
   StopQueryParams,
@@ -26,23 +28,26 @@ import type {
   PaginatedResponse,
 } from '@/types';
 
-// Auth API
+// Auth API - Real API
 export const authApi = {
-  login: (credentials: LoginCredentials) => mockApi.login(credentials),
-  getMe: () => mockApi.getMe(),
-  logout: async () => { /* Mock logout */ },
+  login: (credentials: LoginCredentials) => 
+    apiClient.post<AuthResponse>('/login/', credentials),
+  
+  getMe: () => 
+    apiClient.get<User>('/me/'),
+  
+  logout: async () => {
+    apiClient.clearAuth();
+  },
 };
 
-// Users API
+// Users API - Real API (Admin only)
 export const usersApi = {
-  getUsers: (params?: ListQueryParams) => mockApi.getUsers(),
-  createUser: (data: { name: string; email: string; password: string; role: string }) =>
-    Promise.resolve({ id: '3', ...data, created_at: new Date().toISOString() } as User),
-  updateUser: (id: string, data: Partial<User>) =>
-    Promise.resolve({ id, ...data } as User),
-  deleteUser: (id: string) => Promise.resolve(),
-  getAuditLogs: (params?: ListQueryParams) =>
-    Promise.resolve({ data: [], total: 0, page: 1, per_page: 10, total_pages: 0 }),
+  getUsers: () => 
+    apiClient.get<User[]>('/users/'),
+  
+  registerUser: (data: RegisterUserInput) =>
+    apiClient.post<{ token: string }>('/register/', data),
 };
 
 // Stops API

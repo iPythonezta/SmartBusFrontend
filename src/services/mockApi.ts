@@ -14,21 +14,21 @@ import type {
   BusETA,
 } from '@/types';
 
-// Mock Users
+// Mock Users (kept for backwards compatibility, real API used for auth)
 export const mockUsers: User[] = [
   {
-    id: '1',
-    name: 'Admin User',
+    id: 1,
     email: 'admin@smartbus.pk',
-    role: 'admin',
-    created_at: '2024-01-01T00:00:00Z',
+    first_name: 'Admin',
+    last_name: 'User',
+    user_type: 'ADMIN',
   },
   {
-    id: '2',
-    name: 'Staff User',
+    id: 2,
     email: 'staff@smartbus.pk',
-    role: 'staff',
-    created_at: '2024-01-01T00:00:00Z',
+    first_name: 'Staff',
+    last_name: 'User',
+    user_type: 'STAFF',
   },
 ];
 

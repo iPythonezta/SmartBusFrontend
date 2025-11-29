@@ -17,67 +17,49 @@ class ApiClient {
     // Request interceptor to add auth token
     this.client.interceptors.request.use(
       (config) => {
-        const token = this.getToken();
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
+        // Don't add auth header for login endpoint only (register requires admin auth)
+        const url = config.url || '';
+        const isLoginEndpoint = url.includes('/login');
+        
+        if (!isLoginEndpoint) {
+          const token = localStorage.getItem('auth_token');
+          if (token) {
+            config.headers.Authorization = `Token ${token}`;
+          }
         }
         return config;
       },
       (error) => Promise.reject(error)
     );
 
-    // Response interceptor for token refresh
+    // Response interceptor for error handling
     this.client.interceptors.response.use(
       (response) => response,
       async (error: AxiosError) => {
-        const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
-
-        if (error.response?.status === 401 && !originalRequest._retry) {
-          originalRequest._retry = true;
-
-          try {
-            const refreshToken = this.getRefreshToken();
-            if (refreshToken) {
-              const response = await axios.post(`${API_URL}/auth/refresh`, {
-                refresh_token: refreshToken,
-              });
-
-              const { access_token } = response.data;
-              this.setToken(access_token);
-
-              if (originalRequest.headers) {
-                originalRequest.headers.Authorization = `Bearer ${access_token}`;
-              }
-
-              return this.client(originalRequest);
-            }
-          } catch (refreshError) {
-            this.clearTokens();
-            window.location.href = '/login';
-            return Promise.reject(refreshError);
-          }
+        const requestUrl = error.config?.url || '';
+        const isLoginEndpoint = requestUrl.includes('/login');
+        const token = localStorage.getItem('auth_token');
+        
+        // Only redirect on 401 if not on login endpoint and we had a token
+        if (error.response?.status === 401 && !isLoginEndpoint && token) {
+          this.clearAuth();
+          window.location.href = '/login';
         }
-
         return Promise.reject(error);
       }
     );
   }
 
   private getToken(): string | null {
-    return localStorage.getItem('access_token');
-  }
-
-  private getRefreshToken(): string | null {
-    return localStorage.getItem('refresh_token');
+    return localStorage.getItem('auth_token');
   }
 
   private setToken(token: string): void {
-    localStorage.setItem('access_token', token);
+    localStorage.setItem('auth_token', token);
   }
 
   private clearTokens(): void {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('auth_token');
     localStorage.removeItem('user');
   }
 
@@ -108,9 +90,8 @@ class ApiClient {
   }
 
   // Auth methods
-  setAuthTokens(accessToken: string, refreshToken: string): void {
-    localStorage.setItem('access_token', accessToken);
-    localStorage.setItem('refresh_token', refreshToken);
+  setAuthToken(token: string): void {
+    this.setToken(token);
   }
 
   clearAuth(): void {

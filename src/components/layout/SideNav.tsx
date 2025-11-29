@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils';
 
 const SideNav: React.FC = () => {
   const { t } = useTranslation();
-  const { hasRole } = useAuth();
+  const { isAdmin } = useAuth();
   const sidebarOpen = useUIStore((state) => state.sidebarOpen);
 
   const navItems = [
@@ -29,7 +29,7 @@ const SideNav: React.FC = () => {
     { to: '/display-units', icon: Monitor, label: t('nav.displays') },
     { to: '/ads', icon: Image, label: t('nav.ads') },
     { to: '/announcements', icon: Megaphone, label: t('nav.announcements') },
-    ...(hasRole('admin') ? [{ to: '/users', icon: Users, label: t('nav.users') }] : []),
+    ...(isAdmin ? [{ to: '/users', icon: Users, label: t('nav.users') }] : []),
     { to: '/settings', icon: Settings, label: t('nav.settings') },
   ];
 
