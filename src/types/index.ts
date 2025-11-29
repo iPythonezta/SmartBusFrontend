@@ -182,26 +182,27 @@ export interface CreateAdScheduleInput {
 // Announcement types
 export interface Announcement {
   id: string;
+  title: string;
   message: string;
   message_ur?: string;
   severity: 'info' | 'warning' | 'emergency';
   start_time: string;
   end_time: string;
-  target_type: 'all' | 'route' | 'display';
-  target_ids?: string[];
+  route_ids: string[]; // Routes where announcement will be displayed
+  routes?: Route[]; // Populated route objects
   created_by: string;
   created_at: string;
   updated_at: string;
 }
 
 export interface CreateAnnouncementInput {
+  title: string;
   message: string;
   message_ur?: string;
   severity: 'info' | 'warning' | 'emergency';
   start_time: string;
   end_time: string;
-  target_type: 'all' | 'route' | 'display';
-  target_ids?: string[];
+  route_ids: string[]; // Empty array means all routes
 }
 
 // Real-time types

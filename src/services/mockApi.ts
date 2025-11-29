@@ -269,25 +269,39 @@ export let mockAdSchedules: AdSchedule[] = [
 export const mockAnnouncements: Announcement[] = [
   {
     id: '1',
-    message: 'Service operating normally',
-    message_ur: 'سروس معمول کے مطابق چل رہی ہے',
+    title: 'Normal Service',
+    message: 'All services operating normally',
+    message_ur: 'تمام خدمات معمول کے مطابق چل رہی ہیں',
     severity: 'info',
     start_time: new Date().toISOString(),
     end_time: new Date(Date.now() + 86400000).toISOString(),
-    target_type: 'all',
+    route_ids: [],
     created_by: '1',
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
   },
   {
     id: '2',
-    message: 'Slight delay on Blue Line due to traffic',
-    message_ur: 'ٹریفک کی وجہ سے بلیو لائن میں معمولی تاخیر',
+    title: 'Traffic Delay on Blue Line',
+    message: 'Slight delay on Blue Line due to heavy traffic near Secretariat',
+    message_ur: 'سیکرٹیریٹ کے قریب بھاری ٹریفک کی وجہ سے بلیو لائن میں معمولی تاخیر',
     severity: 'warning',
     start_time: new Date().toISOString(),
     end_time: new Date(Date.now() + 3600000).toISOString(),
-    target_type: 'route',
-    target_ids: ['1'],
+    route_ids: ['1'],
+    created_by: '1',
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+  },
+  {
+    id: '3',
+    title: 'Route Closure Notice',
+    message: 'Green Line service suspended due to road maintenance. Expected to resume at 6:00 PM.',
+    message_ur: 'سڑک کی مرمت کی وجہ سے گرین لائن سروس معطل ہے۔ شام 6 بجے بحال ہونے کی توقع ہے۔',
+    severity: 'emergency',
+    start_time: new Date().toISOString(),
+    end_time: new Date(Date.now() + 18000000).toISOString(),
+    route_ids: ['2'],
     created_by: '1',
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
@@ -611,6 +625,28 @@ export const mockApi = {
     };
     mockAnnouncements.push(newAnnouncement);
     return newAnnouncement;
+  },
+
+  updateAnnouncement: async (id: string, data: Partial<Announcement>) => {
+    await delay(500);
+    const index = mockAnnouncements.findIndex(a => a.id === id);
+    if (index !== -1) {
+      mockAnnouncements[index] = {
+        ...mockAnnouncements[index],
+        ...data,
+        updated_at: new Date().toISOString(),
+      };
+      return mockAnnouncements[index];
+    }
+    throw new Error('Announcement not found');
+  },
+
+  deleteAnnouncement: async (id: string) => {
+    await delay(500);
+    const index = mockAnnouncements.findIndex(a => a.id === id);
+    if (index !== -1) {
+      mockAnnouncements.splice(index, 1);
+    }
   },
 
   // Users

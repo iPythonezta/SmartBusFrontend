@@ -107,11 +107,10 @@ export const adsApi = {
 // Announcements API
 export const announcementsApi = {
   getAnnouncements: (params?: ListQueryParams) => mockApi.getAnnouncements(),
-  getAnnouncement: (id: string) => Promise.resolve(mockApi.getAnnouncements().then(a => a[0])),
+  getAnnouncement: (id: string) => Promise.resolve(mockApi.getAnnouncements().then(a => a.find(ann => ann.id === id))),
   createAnnouncement: (data: CreateAnnouncementInput) => mockApi.createAnnouncement(data),
-  updateAnnouncement: (id: string, data: Partial<Announcement>) =>
-    Promise.resolve({ id, ...data } as Announcement),
-  deleteAnnouncement: (id: string) => Promise.resolve(),
+  updateAnnouncement: (id: string, data: Partial<Announcement>) => mockApi.updateAnnouncement(id, data),
+  deleteAnnouncement: (id: string) => mockApi.deleteAnnouncement(id),
 };
 
 // Dashboard API

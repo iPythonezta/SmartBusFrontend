@@ -1,19 +1,115 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQuery } from '@tanstack/react-query';
-import { announcementsApi } from '@/services/api';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { announcementsApi, routesApi } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, AlertTriangle, Info, AlertCircle, Calendar, Target } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Plus, AlertTriangle, Info, AlertCircle, Calendar, Route, Pencil, Trash2, Search, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useToast } from '@/components/ui/use-toast';
+import AnnouncementModal from '@/components/modals/AnnouncementModal';
+import type { Announcement, CreateAnnouncementInput } from '@/types';
 
 const AnnouncementsPage: React.FC = () => {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  // Modal state
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   
   const { data: announcements, isLoading } = useQuery({
     queryKey: ['announcements'],
     queryFn: () => announcementsApi.getAnnouncements(),
   });
+
+  const { data: routes } = useQuery({
+    queryKey: ['routes'],
+    queryFn: () => routesApi.getRoutes(),
+  });
+
+  // Filter announcements by search query
+  const filteredAnnouncements = useMemo(() => {
+    if (!announcements) return [];
+    if (!searchQuery.trim()) return announcements;
+    
+    const query = searchQuery.toLowerCase();
+    return announcements.filter(a => 
+      a.title.toLowerCase().includes(query) ||
+      a.message.toLowerCase().includes(query) ||
+      a.severity.toLowerCase().includes(query)
+    );
+  }, [announcements, searchQuery]);
+
+  // Mutations
+  const createMutation = useMutation({
+    mutationFn: (data: CreateAnnouncementInput) => announcementsApi.createAnnouncement(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['announcements'] });
+      setIsModalOpen(false);
+      toast({ title: 'Announcement Created', description: 'The announcement has been created successfully.' });
+    },
+    onError: () => {
+      toast({ title: 'Error', description: 'Failed to create announcement.', variant: 'destructive' });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<Announcement> }) => 
+      announcementsApi.updateAnnouncement(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['announcements'] });
+      setIsModalOpen(false);
+      setEditingAnnouncement(null);
+      toast({ title: 'Announcement Updated', description: 'The announcement has been updated successfully.' });
+    },
+    onError: () => {
+      toast({ title: 'Error', description: 'Failed to update announcement.', variant: 'destructive' });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => announcementsApi.deleteAnnouncement(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['announcements'] });
+      setDeleteConfirmId(null);
+      toast({ title: 'Announcement Deleted', description: 'The announcement has been removed.' });
+    },
+    onError: () => {
+      toast({ title: 'Error', description: 'Failed to delete announcement.', variant: 'destructive' });
+    },
+  });
+
+  const handleAdd = () => {
+    setEditingAnnouncement(null);
+    setIsModalOpen(true);
+  };
+
+  const handleEdit = (announcement: Announcement) => {
+    setEditingAnnouncement(announcement);
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = (id: string) => {
+    if (deleteConfirmId === id) {
+      deleteMutation.mutate(id);
+    } else {
+      setDeleteConfirmId(id);
+      setTimeout(() => setDeleteConfirmId(null), 3000);
+    }
+  };
+
+  const handleModalSubmit = (data: CreateAnnouncementInput) => {
+    if (editingAnnouncement) {
+      updateMutation.mutate({ id: editingAnnouncement.id, data });
+    } else {
+      createMutation.mutate(data);
+    }
+  };
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -31,6 +127,19 @@ const AnnouncementsPage: React.FC = () => {
       case 'info': return Info;
       default: return Info;
     }
+  };
+
+  const getRouteNames = (routeIds: string[]) => {
+    if (!routes || routeIds.length === 0) return 'All Routes';
+    return routeIds
+      .map(id => routes.find(r => r.id === id)?.name)
+      .filter(Boolean)
+      .join(', ') || 'All Routes';
+  };
+
+  const isActive = (startTime: string, endTime: string) => {
+    const now = new Date();
+    return new Date(startTime) <= now && new Date(endTime) >= now;
   };
 
   const infoCount = announcements?.filter(a => a.severity === 'info').length || 0;
@@ -69,10 +178,21 @@ const AnnouncementsPage: React.FC = () => {
           <h1 className="text-3xl font-bold">{t('announcements.title')}</h1>
           <p className="text-muted-foreground mt-1">Manage system announcements and alerts</p>
         </div>
-        <Button className="gap-2">
-          <Plus className="h-4 w-4" />
-          {t('announcements.add')}
-        </Button>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search announcements..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 w-64"
+            />
+          </div>
+          <Button className="gap-2" onClick={handleAdd}>
+            <Plus className="h-4 w-4" />
+            Add Announcement
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -134,9 +254,9 @@ const AnnouncementsPage: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 gap-4">
-        {announcements?.map((announcement, index) => {
+        {filteredAnnouncements?.map((announcement, index) => {
           const SeverityIcon = getSeverityIcon(announcement.severity);
-          const isActive = new Date(announcement.start_time) <= new Date() && new Date(announcement.end_time) >= new Date();
+          const announcementActive = isActive(announcement.start_time, announcement.end_time);
           
           return (
             <motion.div
@@ -154,15 +274,16 @@ const AnnouncementsPage: React.FC = () => {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <CardTitle className="text-lg">{announcement.message}</CardTitle>
-                          {isActive && (
+                          <CardTitle className="text-lg">{announcement.title}</CardTitle>
+                          {announcementActive && (
                             <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">
                               Active
                             </span>
                           )}
                         </div>
+                        <p className="text-sm text-muted-foreground mt-1">{announcement.message}</p>
                         {announcement.message_ur && (
-                          <p className="text-sm text-muted-foreground mt-1 font-urdu">{announcement.message_ur}</p>
+                          <p className="text-sm text-muted-foreground mt-1 font-urdu" dir="rtl">{announcement.message_ur}</p>
                         )}
                       </div>
                     </div>
@@ -182,27 +303,32 @@ const AnnouncementsPage: React.FC = () => {
                     </div>
                     
                     <div className="flex items-center gap-2 text-muted-foreground">
-                      <Target className="h-4 w-4" />
+                      <Route className="h-4 w-4" />
                       <div>
-                        <p className="text-xs font-medium">Target: {announcement.target_type}</p>
-                        {announcement.target_ids && announcement.target_ids.length > 0 && (
-                          <p className="text-xs">{announcement.target_ids.length} target(s)</p>
-                        )}
+                        <p className="text-xs font-medium">Routes</p>
+                        <p className="text-xs">{getRouteNames(announcement.route_ids || [])}</p>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2 text-muted-foreground">
-                      <Info className="h-4 w-4" />
-                      <p className="text-xs">Created by: {announcement.created_by}</p>
+                      <Clock className="h-4 w-4" />
+                      <p className="text-xs">Created: {new Date(announcement.created_at).toLocaleDateString()}</p>
                     </div>
                   </div>
 
                   <div className="flex gap-2 pt-2">
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" className="gap-1" onClick={() => handleEdit(announcement)}>
+                      <Pencil className="h-3 w-3" />
                       Edit
                     </Button>
-                    <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700">
-                      Delete
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className={`gap-1 ${deleteConfirmId === announcement.id ? 'bg-red-100 text-red-700' : 'text-red-600 hover:text-red-700'}`}
+                      onClick={() => handleDelete(announcement.id)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      {deleteConfirmId === announcement.id ? 'Confirm Delete?' : 'Delete'}
                     </Button>
                   </div>
                 </CardContent>
@@ -210,7 +336,37 @@ const AnnouncementsPage: React.FC = () => {
             </motion.div>
           );
         })}
+
+        {filteredAnnouncements?.length === 0 && (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-medium">No Announcements Found</h3>
+              <p className="text-muted-foreground mt-1">
+                {searchQuery ? 'Try a different search term' : 'Create your first announcement to get started'}
+              </p>
+              {!searchQuery && (
+                <Button className="mt-4 gap-2" onClick={handleAdd}>
+                  <Plus className="h-4 w-4" />
+                  Add Announcement
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
+
+      {/* Announcement Modal */}
+      <AnnouncementModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingAnnouncement(null);
+        }}
+        onSubmit={handleModalSubmit}
+        announcement={editingAnnouncement}
+        isLoading={createMutation.isPending || updateMutation.isPending}
+      />
     </div>
   );
 };
