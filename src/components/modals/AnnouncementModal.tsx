@@ -34,7 +34,7 @@ type AnnouncementFormData = z.infer<typeof announcementSchema>;
 interface AnnouncementModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: AnnouncementFormData) => void;
+  onSubmit: (data: { title: string; message: string; message_ur?: string; severity: 'info' | 'warning' | 'emergency'; route_ids: number[]; start_time: string; end_time: string }) => void;
   announcement?: Announcement | null;
   isLoading?: boolean;
 }
@@ -91,13 +91,13 @@ const AnnouncementModal: React.FC<AnnouncementModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       if (announcement) {
-        setSelectedRouteIds(announcement.route_ids || []);
+        setSelectedRouteIds(announcement.route_ids?.map(id => id.toString()) || []);
         reset({
           title: announcement.title,
           message: announcement.message,
           message_ur: announcement.message_ur || '',
           severity: announcement.severity,
-          route_ids: announcement.route_ids || [],
+          route_ids: announcement.route_ids?.map(id => id.toString()) || [],
           start_time: formatDateTimeLocal(new Date(announcement.start_time)),
           end_time: formatDateTimeLocal(new Date(announcement.end_time)),
         });
@@ -143,9 +143,13 @@ const AnnouncementModal: React.FC<AnnouncementModalProps> = ({
   };
 
   const handleFormSubmit = (data: AnnouncementFormData) => {
-    // Convert to ISO strings
+    // Convert string IDs to numbers and to ISO strings for dates
     const submitData = {
-      ...data,
+      title: data.title,
+      message: data.message,
+      message_ur: data.message_ur,
+      severity: data.severity,
+      route_ids: data.route_ids.map(id => parseInt(id, 10)),
       start_time: new Date(data.start_time).toISOString(),
       end_time: new Date(data.end_time).toISOString(),
     };

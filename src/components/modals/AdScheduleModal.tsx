@@ -39,10 +39,10 @@ type ScheduleFormData = z.infer<typeof scheduleSchema>;
 interface AdScheduleModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: ScheduleFormData) => void;
+  onSubmit: (data: { ad_id: number; display_ids: number[]; start_time: string; end_time: string; priority: number }) => void;
   ads: Advertisement[];
   schedule?: AdSchedule | null;
-  preselectedAdId?: string;
+  preselectedAdId?: number;
   isLoading?: boolean;
 }
 
@@ -82,7 +82,7 @@ const AdScheduleModal: React.FC<AdScheduleModalProps> = ({
   });
 
   const watchedAdId = watch('ad_id');
-  const selectedAd = ads.find(a => a.id === watchedAdId);
+  const selectedAd = ads.find(a => a.id.toString() === watchedAdId);
 
   // Helper to format datetime for input
   const formatDateTimeLocal = (date: Date) => {
@@ -94,10 +94,10 @@ const AdScheduleModal: React.FC<AdScheduleModalProps> = ({
     if (isOpen) {
       if (schedule) {
         // Editing single schedule
-        setSelectedDisplayIds([schedule.display_id]);
+        setSelectedDisplayIds([schedule.display_id.toString()]);
         reset({
-          ad_id: schedule.ad_id,
-          display_ids: [schedule.display_id],
+          ad_id: schedule.ad_id.toString(),
+          display_ids: [schedule.display_id.toString()],
           start_time: formatDateTimeLocal(new Date(schedule.start_time)),
           end_time: formatDateTimeLocal(new Date(schedule.end_time)),
           priority: schedule.priority,
@@ -108,7 +108,7 @@ const AdScheduleModal: React.FC<AdScheduleModalProps> = ({
         const endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
         setSelectedDisplayIds([]);
         reset({
-          ad_id: preselectedAdId || '',
+          ad_id: preselectedAdId?.toString() || '',
           display_ids: [],
           start_time: formatDateTimeLocal(now),
           end_time: formatDateTimeLocal(endDate),
@@ -142,11 +142,13 @@ const AdScheduleModal: React.FC<AdScheduleModalProps> = ({
   };
 
   const handleFormSubmit = (data: ScheduleFormData) => {
-    // Convert to ISO strings
+    // Convert string IDs to numbers and to ISO strings for dates
     const submitData = {
-      ...data,
+      ad_id: parseInt(data.ad_id, 10),
+      display_ids: data.display_ids.map(id => parseInt(id, 10)),
       start_time: new Date(data.start_time).toISOString(),
       end_time: new Date(data.end_time).toISOString(),
+      priority: data.priority,
     };
     onSubmit(submitData);
   };
@@ -174,7 +176,7 @@ const AdScheduleModal: React.FC<AdScheduleModalProps> = ({
               </SelectTrigger>
               <SelectContent>
                 {ads.map((ad) => (
-                  <SelectItem key={ad.id} value={ad.id}>
+                  <SelectItem key={ad.id} value={ad.id.toString()}>
                     <div className="flex items-center gap-2">
                       <span className={`px-1.5 py-0.5 text-xs rounded ${
                         ad.media_type === 'youtube' ? 'bg-red-100 text-red-700' : 'bg-purple-100 text-purple-700'

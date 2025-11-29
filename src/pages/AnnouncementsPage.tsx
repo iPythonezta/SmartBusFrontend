@@ -19,7 +19,7 @@ const AnnouncementsPage: React.FC = () => {
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   
   const { data: announcements, isLoading } = useQuery({
@@ -59,7 +59,7 @@ const AnnouncementsPage: React.FC = () => {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<Announcement> }) => 
+    mutationFn: ({ id, data }: { id: number; data: Partial<Announcement> }) => 
       announcementsApi.updateAnnouncement(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['announcements'] });
@@ -73,7 +73,7 @@ const AnnouncementsPage: React.FC = () => {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => announcementsApi.deleteAnnouncement(id),
+    mutationFn: (id: number) => announcementsApi.deleteAnnouncement(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['announcements'] });
       setDeleteConfirmId(null);
@@ -94,7 +94,7 @@ const AnnouncementsPage: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = (id: number) => {
     if (deleteConfirmId === id) {
       deleteMutation.mutate(id);
     } else {
@@ -129,10 +129,10 @@ const AnnouncementsPage: React.FC = () => {
     }
   };
 
-  const getRouteNames = (routeIds: string[]) => {
+  const getRouteNames = (routeIds: number[]) => {
     if (!routes || routeIds.length === 0) return 'All Routes';
     return routeIds
-      .map(id => routes.find(r => String(r.id) === id)?.name)
+      .map(id => routes.find(r => r.id === id)?.name)
       .filter(Boolean)
       .join(', ') || 'All Routes';
   };

@@ -34,8 +34,8 @@ const AdsPage: React.FC = () => {
   const [editingAd, setEditingAd] = useState<Advertisement | null>(null);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<AdSchedule | null>(null);
-  const [schedulingAdId, setSchedulingAdId] = useState<string | undefined>(undefined);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [schedulingAdId, setSchedulingAdId] = useState<number | undefined>(undefined);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   
   const { data: ads, isLoading: adsLoading } = useQuery({
@@ -75,7 +75,7 @@ const AdsPage: React.FC = () => {
   });
 
   const updateAdMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<Advertisement> }) => adsApi.updateAd(id, data),
+    mutationFn: ({ id, data }: { id: number; data: Partial<Advertisement> }) => adsApi.updateAd(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ads'] });
       queryClient.invalidateQueries({ queryKey: ['ad-schedules'] });
@@ -89,7 +89,7 @@ const AdsPage: React.FC = () => {
   });
 
   const deleteAdMutation = useMutation({
-    mutationFn: (id: string) => adsApi.deleteAd(id),
+    mutationFn: (id: number) => adsApi.deleteAd(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ads'] });
       queryClient.invalidateQueries({ queryKey: ['ad-schedules'] });
@@ -116,7 +116,7 @@ const AdsPage: React.FC = () => {
   });
 
   const updateScheduleMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<AdSchedule> }) => adsApi.updateSchedule(id, data),
+    mutationFn: ({ id, data }: { id: number; data: Partial<AdSchedule> }) => adsApi.updateSchedule(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ad-schedules'] });
       setIsScheduleModalOpen(false);
@@ -146,7 +146,7 @@ const AdsPage: React.FC = () => {
     setIsAdModalOpen(true);
   };
 
-  const handleScheduleAd = (adId: string) => {
+  const handleScheduleAd = (adId: number) => {
     setEditingSchedule(null);
     setSchedulingAdId(adId);
     setIsScheduleModalOpen(true);

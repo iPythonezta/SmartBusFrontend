@@ -135,26 +135,55 @@ export const displaysApi = {
   getDisplayContent: (_id: string) => Promise.resolve({ ads: [], announcements: [] }),
 };
 
-// Advertisements API (Mock - to be implemented)
+// Advertisements API - Real API
 export const adsApi = {
-  getAds: (_params?: ListQueryParams) => mockApi.getAds(),
-  getAd: (id: string) => Promise.resolve(mockApi.getAds().then(ads => ads.find(a => a.id === id) || ads[0])),
-  createAd: (data: CreateAdInput) => mockApi.createAd(data),
-  updateAd: (id: string, data: Partial<Advertisement>) => mockApi.updateAd(id, data),
-  deleteAd: (id: string) => mockApi.deleteAd(id),
-  getSchedules: (_params?: ListQueryParams) => mockApi.getSchedules(),
-  createSchedule: (data: CreateAdScheduleInput) => mockApi.createSchedule(data),
-  updateSchedule: (id: string, data: Partial<AdSchedule>) => mockApi.updateSchedule(id, data),
-  deleteSchedule: (id: string) => mockApi.deleteSchedule(id),
+  getAds: async (params?: { search?: string; media_type?: string }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.search) searchParams.append('search', params.search);
+    if (params?.media_type) searchParams.append('media_type', params.media_type);
+    const queryString = searchParams.toString();
+    return apiClient.get<Advertisement[]>(`/advertisements/${queryString ? `?${queryString}` : ''}`);
+  },
+  getAd: (id: number) => apiClient.get<Advertisement>(`/advertisements/${id}/`),
+  createAd: (data: CreateAdInput) => apiClient.post<Advertisement>('/advertisements/', data),
+  updateAd: (id: number, data: Partial<Advertisement>) => 
+    apiClient.patch<Advertisement>(`/advertisements/${id}/`, data),
+  deleteAd: (id: number) => apiClient.delete<void>(`/advertisements/${id}/`),
+  
+  // Ad Schedules
+  getSchedules: async (params?: { ad_id?: number; display_id?: number; active?: boolean }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.ad_id) searchParams.append('ad_id', params.ad_id.toString());
+    if (params?.display_id) searchParams.append('display_id', params.display_id.toString());
+    if (params?.active !== undefined) searchParams.append('active', params.active.toString());
+    const queryString = searchParams.toString();
+    return apiClient.get<AdSchedule[]>(`/ad-schedules/${queryString ? `?${queryString}` : ''}`);
+  },
+  getSchedule: (id: number) => apiClient.get<AdSchedule>(`/ad-schedules/${id}/`),
+  createSchedule: (data: CreateAdScheduleInput) => 
+    apiClient.post<AdSchedule[]>('/ad-schedules/', data),
+  updateSchedule: (id: number, data: Partial<AdSchedule>) => 
+    apiClient.patch<AdSchedule>(`/ad-schedules/${id}/`, data),
+  deleteSchedule: (id: number) => apiClient.delete<void>(`/ad-schedules/${id}/`),
 };
 
-// Announcements API (Mock - to be implemented)
+// Announcements API - Real API
 export const announcementsApi = {
-  getAnnouncements: (_params?: ListQueryParams) => mockApi.getAnnouncements(),
-  getAnnouncement: (id: string) => Promise.resolve(mockApi.getAnnouncements().then(a => a.find(ann => ann.id === id))),
-  createAnnouncement: (data: CreateAnnouncementInput) => mockApi.createAnnouncement(data),
-  updateAnnouncement: (id: string, data: Partial<Announcement>) => mockApi.updateAnnouncement(id, data),
-  deleteAnnouncement: (id: string) => mockApi.deleteAnnouncement(id),
+  getAnnouncements: async (params?: { search?: string; severity?: string; active?: boolean; route_id?: number }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.search) searchParams.append('search', params.search);
+    if (params?.severity) searchParams.append('severity', params.severity);
+    if (params?.active !== undefined) searchParams.append('active', params.active.toString());
+    if (params?.route_id) searchParams.append('route_id', params.route_id.toString());
+    const queryString = searchParams.toString();
+    return apiClient.get<Announcement[]>(`/announcements/${queryString ? `?${queryString}` : ''}`);
+  },
+  getAnnouncement: (id: number) => apiClient.get<Announcement>(`/announcements/${id}/`),
+  createAnnouncement: (data: CreateAnnouncementInput) => 
+    apiClient.post<Announcement>('/announcements/', data),
+  updateAnnouncement: (id: number, data: Partial<Announcement>) => 
+    apiClient.patch<Announcement>(`/announcements/${id}/`, data),
+  deleteAnnouncement: (id: number) => apiClient.delete<void>(`/announcements/${id}/`),
 };
 
 // Dashboard API - Real API

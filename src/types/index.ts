@@ -228,7 +228,7 @@ export interface CreateDisplayInput {
 
 // Advertisement types
 export interface Advertisement {
-  id: string;
+  id: number;
   title: string;
   content_url: string;
   media_type: 'image' | 'youtube';
@@ -241,9 +241,9 @@ export interface Advertisement {
 }
 
 export interface AdSchedule {
-  id: string;
-  ad_id: string;
-  display_id: string;
+  id: number;
+  ad_id: number;
+  display_id: number;
   display_name?: string;
   start_time: string;
   end_time: string;
@@ -268,8 +268,8 @@ export interface CreateAdInput {
 }
 
 export interface CreateAdScheduleInput {
-  ad_id: string;
-  display_ids: string[]; // Changed to array for multi-select
+  ad_id: number;
+  display_ids: number[]; // Changed to array for multi-select
   start_time: string;
   end_time: string;
   priority: number;
@@ -277,14 +277,14 @@ export interface CreateAdScheduleInput {
 
 // Announcement types
 export interface Announcement {
-  id: string;
+  id: number;
   title: string;
   message: string;
   message_ur?: string;
   severity: 'info' | 'warning' | 'emergency';
   start_time: string;
   end_time: string;
-  route_ids: string[]; // Routes where announcement will be displayed
+  route_ids: number[]; // Routes where announcement will be displayed
   routes?: Route[]; // Populated route objects
   created_by: string;
   created_at: string;
@@ -298,7 +298,7 @@ export interface CreateAnnouncementInput {
   severity: 'info' | 'warning' | 'emergency';
   start_time: string;
   end_time: string;
-  route_ids: string[]; // Empty array means all routes
+  route_ids: number[]; // Empty array means all routes
 }
 
 // Real-time types
