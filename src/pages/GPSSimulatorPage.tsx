@@ -127,6 +127,9 @@ const GPSSimulatorPage = () => {
   const simulationsRef = useRef<Map<number, BusSimulationState>>(new Map());
   const intervalsRef = useRef<Map<number, ReturnType<typeof setInterval>>>(new Map());
   
+  // Track pending API calls to prevent overlapping requests (which cause "pausing")
+  const pendingUpdatesRef = useRef<Set<number>>(new Set());
+  
   // Global state
   const [globalSimulating, setGlobalSimulating] = useState(false);
   
@@ -307,72 +310,80 @@ const GPSSimulatorPage = () => {
 
   // Advance simulation - called every second
   const advanceAndUpdateBus = useCallback(async (busId: number) => {
+    // Skip if there's already a pending API call for this bus (prevents "pausing" behavior)
+    if (pendingUpdatesRef.current.has(busId)) {
+      console.log(`[GPSSimulator] Skipping update for bus ${busId} - previous update still pending`);
+      return;
+    }
+
     const currentSim = simulationsRef.current.get(busId);
     if (!currentSim || !currentSim.isSimulating) return;
 
     const { pathPoints, totalRouteDistance, busName } = currentSim;
     if (!pathPoints || pathPoints.length < 2 || totalRouteDistance <= 0) return;
 
-    // Calculate distance traveled in this tick based on speed
-    // speed is in km/h, interval is in ms
-    // distance = speed * time = (km/h) * (ms / 3600000) * 1000m = speed * interval / 3600 meters
-    const metersPerTick = (paramsRef.current.speedKmh * paramsRef.current.updateIntervalMs) / 3600;
+    // Mark this bus as having a pending update
+    pendingUpdatesRef.current.add(busId);
 
-    let { distanceTraveled } = currentSim;
-    
-    // Add distance traveled
-    distanceTraveled += metersPerTick;
+    try {
+      // Calculate distance traveled in this tick based on speed
+      // speed is in km/h, interval is in ms
+      // distance = speed * time = (km/h) * (ms / 3600000) * 1000m = speed * interval / 3600 meters
+      const metersPerTick = (paramsRef.current.speedKmh * paramsRef.current.updateIntervalMs) / 3600;
 
-    // Check if we've reached the end of the route
-    if (distanceTraveled >= totalRouteDistance) {
-      // Set to exact end position
-      distanceTraveled = totalRouteDistance;
+      let { distanceTraveled } = currentSim;
       
-      // Update state one last time with final position
-      const finalState: BusSimulationState = {
-        ...currentSim,
-        distanceTraveled,
-        isSimulating: false,
-      };
+      // Add distance traveled
+      distanceTraveled += metersPerTick;
 
-      // Send final position (at the last stop)
-      const finalPosition = getCurrentPosition(finalState);
-      try {
+      // Check if we've reached the end of the route
+      if (distanceTraveled >= totalRouteDistance) {
+        // Set to exact end position
+        distanceTraveled = totalRouteDistance;
+        
+        // Update state one last time with final position
+        const finalState: BusSimulationState = {
+          ...currentSim,
+          distanceTraveled,
+          isSimulating: false,
+        };
+
+        // Send final position (at the last stop)
+        const finalPosition = getCurrentPosition(finalState);
         await updateLocationMutation.mutateAsync({
           busId,
           ...finalPosition,
         });
-      } catch (error) {
-        console.error(`Failed to send final position for bus ${busId}:`, error);
+
+        // Stop simulation and end trip
+        await stopSimulationAndEndTrip(busId, busName);
+        return;
       }
 
-      // Stop simulation and end trip
-      await stopSimulationAndEndTrip(busId, busName);
-      return;
-    }
+      // Update state
+      const newSimState: BusSimulationState = {
+        ...currentSim,
+        distanceTraveled,
+      };
 
-    // Update state
-    const newSimState: BusSimulationState = {
-      ...currentSim,
-      distanceTraveled,
-    };
+      setBusSimulations(prev => {
+        const newMap = new Map(prev);
+        newMap.set(busId, newSimState);
+        return newMap;
+      });
 
-    setBusSimulations(prev => {
-      const newMap = new Map(prev);
-      newMap.set(busId, newSimState);
-      return newMap;
-    });
-
-    // Calculate and send position
-    const position = getCurrentPosition(newSimState);
-    
-    try {
+      // Calculate and send position
+      const position = getCurrentPosition(newSimState);
+      
       await updateLocationMutation.mutateAsync({
         busId,
         ...position,
       });
     } catch (error) {
       console.error(`Failed to update bus ${busId}:`, error);
+    } finally {
+      // Always clear the pending flag so the next interval can run
+      pendingUpdatesRef.current.delete(busId);
     }
   }, [getCurrentPosition, stopSimulationAndEndTrip, updateLocationMutation]);
 
