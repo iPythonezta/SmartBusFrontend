@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/components/ui/use-toast';
-import { Loader2, MapPin } from 'lucide-react';
+import { Loader2, MapPin, Search, X } from 'lucide-react';
 import type { Stop } from '@/types';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -33,6 +33,14 @@ const stopSchema = z.object({
 });
 
 type StopFormData = z.infer<typeof stopSchema>;
+
+// Mapbox Geocoding result types
+interface GeocodingFeature {
+  id: string;
+  place_name: string;
+  center: [number, number]; // [lng, lat]
+  text: string;
+}
 
 interface StopModalProps {
   open: boolean;
@@ -69,6 +77,118 @@ export const StopModal: React.FC<StopModalProps> = ({ open, onClose, stop, mode 
       longitude: 73.0479,
     },
   });
+
+  // Location search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<GeocodingFeature[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const searchTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Debounced search function
+  const handleSearchChange = useCallback((query: string) => {
+    setSearchQuery(query);
+    console.log('[StopModal] Search query:', query);
+    
+    // Clear previous timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    if (query.length < 3) {
+      setSearchResults([]);
+      setShowResults(false);
+      return;
+    }
+
+    // Debounce search
+    searchTimeoutRef.current = setTimeout(async () => {
+      setIsSearching(true);
+      console.log('[StopModal] Searching for:', query);
+      try {
+        // Use OpenStreetMap Nominatim API - better coverage for Pakistan
+        const url = `https://nominatim.openstreetmap.org/search?` +
+          `q=${encodeURIComponent(query + ', Islamabad, Pakistan')}&` +
+          `format=json&` +
+          `addressdetails=1&` +
+          `limit=8&` +
+          `countrycodes=pk&` +
+          `viewbox=72.8,33.4,73.5,34.0&` + // Islamabad region
+          `bounded=0`; // Don't strictly bound, just prefer this area
+        
+        console.log('[StopModal] Nominatim URL:', url);
+        
+        const response = await fetch(url, {
+          headers: {
+            'Accept-Language': 'en',
+          }
+        });
+        const data = await response.json();
+        console.log('[StopModal] Search results:', data?.length || 0, 'features');
+        console.log('[StopModal] Results data:', data);
+        
+        // Transform Nominatim results to match our expected format
+        const transformedResults: GeocodingFeature[] = (data || []).map((item: {
+          place_id: number;
+          display_name: string;
+          lon: string;
+          lat: string;
+          name?: string;
+          type?: string;
+        }) => ({
+          id: String(item.place_id),
+          place_name: item.display_name,
+          center: [parseFloat(item.lon), parseFloat(item.lat)] as [number, number],
+          text: item.name || item.display_name.split(',')[0],
+        }));
+        
+        if (transformedResults.length > 0) {
+          console.log('[StopModal] First result:', transformedResults[0].place_name);
+        }
+        setSearchResults(transformedResults);
+        setShowResults(true);
+        console.log('[StopModal] showResults set to true, searchResults length:', transformedResults.length);
+      } catch (error) {
+        console.error('[StopModal] Geocoding search failed:', error);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 500); // Slightly longer debounce for Nominatim rate limits
+  }, []);
+
+  // Handle selecting a search result
+  const handleSelectResult = useCallback((result: GeocodingFeature) => {
+    const [lng, lat] = result.center;
+    
+    // Update marker position
+    setMarkerPosition({ lng, lat });
+    setValue('latitude', lat);
+    setValue('longitude', lng);
+    
+    // Optionally use the place name as the stop name if empty
+    const currentName = (document.getElementById('name') as HTMLInputElement)?.value;
+    if (!currentName) {
+      setValue('name', result.text);
+    }
+
+    // Move map and marker
+    if (mapRef.current) {
+      mapRef.current.flyTo({
+        center: [lng, lat],
+        zoom: 16,
+        duration: 1000,
+      });
+    }
+    if (markerRef.current) {
+      markerRef.current.setLngLat([lng, lat]);
+    }
+
+    // Clear search
+    setSearchQuery('');
+    setSearchResults([]);
+    setShowResults(false);
+  }, [setValue]);
 
   // Reset form when stop changes or modal opens
   useEffect(() => {
@@ -271,7 +391,7 @@ export const StopModal: React.FC<StopModalProps> = ({ open, onClose, stop, mode 
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto overflow-x-visible">
         <DialogHeader>
           <DialogTitle>
             {mode === 'add' ? t('stops.addStop') : t('stops.editStop')}
@@ -341,7 +461,72 @@ export const StopModal: React.FC<StopModalProps> = ({ open, onClose, stop, mode 
               <MapPin className="h-4 w-4" />
               Click on map to place stop marker (drag to adjust)
             </Label>
-            <div className="relative">
+            
+            {/* Location Search - positioned above map with high z-index */}
+            <div className="relative" style={{ zIndex: 1000 }}>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  placeholder="Search for a location in Islamabad..."
+                  className="pl-9 pr-9"
+                  onFocus={() => searchResults.length > 0 && setShowResults(true)}
+                  onBlur={() => {
+                    // Delay hiding to allow click on results
+                    setTimeout(() => setShowResults(false), 300);
+                  }}
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setSearchResults([]);
+                      setShowResults(false);
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+                {isSearching && (
+                  <Loader2 className="absolute right-9 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                )}
+              </div>
+              
+              {/* Search Results Dropdown - using fixed positioning */}
+              {(() => { console.log('[StopModal] Render check - showResults:', showResults, 'searchResults.length:', searchResults.length); return null; })()}
+              {showResults && searchResults.length > 0 && (
+                <div 
+                  className="absolute left-0 right-0 mt-1 bg-white border-2 border-teal-500 rounded-lg shadow-2xl max-h-60 overflow-auto"
+                  style={{ zIndex: 9999, position: 'absolute', top: '100%' }}
+                >
+                  <div className="bg-teal-100 px-2 py-1 text-xs text-teal-700">
+                    Found {searchResults.length} results
+                  </div>
+                  {searchResults.map((result) => (
+                    <button
+                      key={result.id}
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault(); // Prevent blur
+                        e.stopPropagation();
+                        handleSelectResult(result);
+                      }}
+                      className="w-full px-4 py-3 text-left text-sm hover:bg-teal-50 flex items-start gap-2 border-b last:border-b-0 cursor-pointer"
+                    >
+                      <MapPin className="h-4 w-4 mt-0.5 text-teal-600 flex-shrink-0" />
+                      <span className="line-clamp-2">{result.place_name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Map container with lower z-index */}
+            <div className="relative" style={{ zIndex: 1 }}>
               <div
                 ref={mapContainerRef}
                 style={{

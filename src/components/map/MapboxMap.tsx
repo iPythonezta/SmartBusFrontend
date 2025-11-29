@@ -20,6 +20,7 @@ interface MapboxMapProps {
   height?: string;
   interactive?: boolean;
   showControls?: boolean;
+  fitToBounds?: boolean; // Auto-fit map to show all stops
 }
 
 export const MapboxMap: React.FC<MapboxMapProps> = ({
@@ -31,6 +32,7 @@ export const MapboxMap: React.FC<MapboxMapProps> = ({
   height = '400px',
   interactive = true,
   showControls = true,
+  fitToBounds = false,
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -240,7 +242,7 @@ export const MapboxMap: React.FC<MapboxMapProps> = ({
   };
 
   // Helper function to create distinctive stop marker element
-  const createStopMarkerElement = (stop: Stop) => {
+  const createStopMarkerElement = (stop: Stop, index?: number, totalStops?: number) => {
     const el = document.createElement('div');
     el.className = 'stop-marker';
     el.style.cssText = `
@@ -250,27 +252,62 @@ export const MapboxMap: React.FC<MapboxMapProps> = ({
       cursor: pointer;
     `;
 
+    // Determine if this is start, end, or middle stop
+    const isStart = index === 0;
+    const isEnd = totalStops !== undefined && index === totalStops - 1;
+    
+    // Different colors for start/end/middle
+    let fillColor = routeColor;
+    let iconInner = '<circle cx="12" cy="9" r="3" fill="white"/>';
+    let label = stop.name;
+    let labelBg = 'white';
+    let labelColor = routeColor;
+    let size = { width: 32, height: 40, viewBox: '0 0 24 30' };
+    
+    if (isStart) {
+      fillColor = '#22c55e'; // Green for start
+      iconInner = `
+        <text x="12" y="13" text-anchor="middle" fill="white" font-size="10" font-weight="bold">A</text>
+      `;
+      labelBg = '#22c55e';
+      labelColor = 'white';
+      label = `🚩 ${stop.name}`;
+    } else if (isEnd) {
+      fillColor = '#ef4444'; // Red for end
+      iconInner = `
+        <text x="12" y="13" text-anchor="middle" fill="white" font-size="10" font-weight="bold">B</text>
+      `;
+      labelBg = '#ef4444';
+      labelColor = 'white';
+      label = `🏁 ${stop.name}`;
+    } else if (index !== undefined) {
+      // Middle stops - show sequence number
+      iconInner = `
+        <text x="12" y="13" text-anchor="middle" fill="white" font-size="9" font-weight="bold">${index + 1}</text>
+      `;
+    }
+
     el.innerHTML = `
-      <svg width="32" height="40" viewBox="0 0 24 30" style="filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.3));">
+      <svg width="${size.width}" height="${size.height}" viewBox="${size.viewBox}" style="filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.3));">
         <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" 
-              fill="${routeColor}" 
+              fill="${fillColor}" 
               stroke="white" 
               stroke-width="2"/>
-        <circle cx="12" cy="9" r="3" fill="white"/>
+        ${iconInner}
       </svg>
       <div style="
         margin-top: 2px;
-        background: white;
-        border: 2px solid ${routeColor};
+        background: ${labelBg};
+        border: 2px solid ${fillColor};
         border-radius: 12px;
         padding: 2px 8px;
         font-size: 11px;
         font-weight: 700;
-        color: ${routeColor};
+        color: ${labelColor};
         white-space: nowrap;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
         font-family: system-ui, -apple-system, sans-serif;
-      ">${stop.name}</div>
+      ">${label}</div>
     `;
 
     return el;
@@ -289,16 +326,26 @@ export const MapboxMap: React.FC<MapboxMapProps> = ({
       }
     });
 
+    const totalStops = stops.length;
+
     // Add or update stop markers
-    stops.forEach((stop) => {
+    stops.forEach((stop, index) => {
       const existingMarker = stopMarkers.current.get(stop.id);
       
       if (existingMarker) {
-        // Just update position if marker already exists (stops don't move usually)
+        // Update position and recreate element to update styling (for sequence changes)
         existingMarker.setLngLat([stop.longitude, stop.latitude]);
+        const newEl = createStopMarkerElement(stop, index, totalStops);
+        existingMarker.getElement().innerHTML = newEl.innerHTML;
       } else {
         // Create new marker only if it doesn't exist
-        const el = createStopMarkerElement(stop);
+        const el = createStopMarkerElement(stop, index, totalStops);
+        
+        // Determine label type for popup
+        const isStart = index === 0;
+        const isEnd = index === totalStops - 1;
+        const stopType = isStart ? 'Starting Point' : isEnd ? 'Final Destination' : `Stop #${index + 1}`;
+        const stopColor = isStart ? '#22c55e' : isEnd ? '#ef4444' : routeColor;
         
         const marker = new mapboxgl.Marker({
           element: el,
@@ -308,12 +355,20 @@ export const MapboxMap: React.FC<MapboxMapProps> = ({
           .setPopup(
             new mapboxgl.Popup({ offset: 25 }).setHTML(`
               <div style="font-family: system-ui; padding: 12px; min-width: 150px;">
-                <h3 style="font-weight: 700; color: ${routeColor}; margin: 0 0 8px 0; font-size: 14px;">
+                <div style="
+                  display: inline-block;
+                  background: ${stopColor};
+                  color: white;
+                  padding: 2px 8px;
+                  border-radius: 8px;
+                  font-size: 10px;
+                  font-weight: 600;
+                  margin-bottom: 8px;
+                ">${stopType}</div>
+                <h3 style="font-weight: 700; color: ${stopColor}; margin: 0 0 4px 0; font-size: 14px;">
                   ${stop.name}
                 </h3>
-                <div style="font-size: 12px; color: #64748b;">
-                  Bus Stop
-                </div>
+                ${stop.description ? `<div style="font-size: 12px; color: #64748b;">${stop.description}</div>` : ''}
               </div>
             `)
           )
@@ -323,6 +378,32 @@ export const MapboxMap: React.FC<MapboxMapProps> = ({
       }
     });
   }, [stops.map(s => s.id).join(','), mapLoaded, routeColor]); // Only re-run when stop IDs change
+
+  // Auto-fit bounds to show all stops
+  useEffect(() => {
+    if (!map.current || !mapLoaded || !fitToBounds || stops.length === 0) return;
+
+    // Calculate bounds
+    const bounds = new mapboxgl.LngLatBounds();
+    
+    stops.forEach(stop => {
+      bounds.extend([stop.longitude, stop.latitude]);
+    });
+
+    // Also include bus positions if any
+    buses.forEach(bus => {
+      if (bus.last_location) {
+        bounds.extend([bus.last_location.longitude, bus.last_location.latitude]);
+      }
+    });
+
+    // Fit the map to the bounds with padding
+    map.current.fitBounds(bounds, {
+      padding: { top: 50, bottom: 50, left: 50, right: 50 },
+      maxZoom: 15,
+      duration: 1000,
+    });
+  }, [stops.map(s => s.id).join(','), fitToBounds, mapLoaded]);
 
   // Draw route polyline with actual road-based routing - Only re-run when stop IDs/coordinates change
   useEffect(() => {

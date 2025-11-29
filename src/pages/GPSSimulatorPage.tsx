@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { busesApi } from '@/services/api';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { busesApi, routesApi } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,39 +13,151 @@ import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 import type { Bus as BusType, RouteStopInfo } from '@/types';
 
+// Mapbox access token for directions API
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_API_KEY || '';
+
 // Islamabad coordinates for buses without routes
 const ISB_BASE_COORDINATES = {
   lat: 33.6844,
   lng: 73.0479,
 };
 
+// A point along the route path
+interface PathPoint {
+  lat: number;
+  lng: number;
+  distanceFromStart: number; // cumulative distance from route start in meters
+}
+
+// Calculate distance between two coordinates in meters using Haversine formula
+function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000; // Earth's radius in meters
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+// Fetch road geometry between stops using Mapbox Directions API
+async function fetchRouteGeometry(stops: RouteStopInfo[]): Promise<PathPoint[]> {
+  if (stops.length < 2) return [];
+  
+  // Build coordinates string for Mapbox API (max 25 waypoints per request)
+  const coordinates = stops
+    .map(s => `${s.longitude},${s.latitude}`)
+    .join(';');
+  
+  try {
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordinates}?` +
+      `geometries=geojson&overview=full&access_token=${MAPBOX_TOKEN}`;
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.routes && data.routes[0] && data.routes[0].geometry) {
+      const coords = data.routes[0].geometry.coordinates;
+      const pathPoints: PathPoint[] = [];
+      let cumulativeDistance = 0;
+      
+      for (let i = 0; i < coords.length; i++) {
+        const [lng, lat] = coords[i];
+        
+        if (i > 0) {
+          const prevPoint = coords[i - 1];
+          cumulativeDistance += calculateDistance(prevPoint[1], prevPoint[0], lat, lng);
+        }
+        
+        pathPoints.push({
+          lat,
+          lng,
+          distanceFromStart: cumulativeDistance,
+        });
+      }
+      
+      console.log(`[GPSSimulator] Fetched route with ${pathPoints.length} points, total distance: ${Math.round(cumulativeDistance)}m`);
+      return pathPoints;
+    }
+  } catch (error) {
+    console.error('[GPSSimulator] Failed to fetch route geometry:', error);
+  }
+  
+  // Fallback: create simple path from stops
+  console.log('[GPSSimulator] Using fallback linear path between stops');
+  const pathPoints: PathPoint[] = [];
+  let cumulativeDistance = 0;
+  
+  for (let i = 0; i < stops.length; i++) {
+    if (i > 0) {
+      cumulativeDistance += calculateDistance(
+        stops[i-1].latitude, stops[i-1].longitude,
+        stops[i].latitude, stops[i].longitude
+      );
+    }
+    pathPoints.push({
+      lat: stops[i].latitude,
+      lng: stops[i].longitude,
+      distanceFromStart: cumulativeDistance,
+    });
+  }
+  
+  return pathPoints;
+}
+
 interface BusSimulationState {
   busId: number;
+  busName: string;
+  routeName: string;
   isSimulating: boolean;
-  currentStopIndex: number;
-  progress: number; // 0-1 progress between stops
-  direction: 'forward' | 'backward';
-  intervalId: ReturnType<typeof setInterval> | null;
+  distanceTraveled: number; // total meters traveled along the path
+  totalRouteDistance: number; // total route distance in meters
+  stops: RouteStopInfo[];
+  pathPoints: PathPoint[]; // detailed road geometry
+  currentPathIndex: number; // current index in pathPoints array
 }
 
 const GPSSimulatorPage: React.FC = () => {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
   
-  // Global simulation state
-  const [globalSimulating, setGlobalSimulating] = useState(false);
+  // Simulation state - use ref to avoid stale closure issues
   const [busSimulations, setBusSimulations] = useState<Map<number, BusSimulationState>>(new Map());
-  const globalIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const simulationsRef = useRef<Map<number, BusSimulationState>>(new Map());
+  const intervalsRef = useRef<Map<number, ReturnType<typeof setInterval>>>(new Map());
   
-  // Simulation parameters
+  // Global state
+  const [globalSimulating, setGlobalSimulating] = useState(false);
+  
+  // Simulation parameters - speed in km/h, update every 1 second
   const [params, setParams] = useState({
     speedKmh: 40,
-    updateIntervalMs: 2000,
+    updateIntervalMs: 1000, // Update every 1 second
   });
+  const paramsRef = useRef(params);
 
-  const { data: buses, isLoading, refetch } = useQuery({
+  // Keep refs in sync with state
+  useEffect(() => {
+    simulationsRef.current = busSimulations;
+  }, [busSimulations]);
+
+  useEffect(() => {
+    paramsRef.current = params;
+  }, [params]);
+
+  // Query buses
+  const { data: buses, isLoading, refetch: refetchBuses } = useQuery({
     queryKey: ['buses'],
     queryFn: () => busesApi.getBuses(),
+    staleTime: 0, // Always fetch fresh data
+  });
+
+  // Also fetch routes to get stop details when needed
+  const { data: routes } = useQuery({
+    queryKey: ['routes'],
+    queryFn: () => routesApi.getRoutes(),
+    staleTime: 0,
   });
 
   const updateLocationMutation = useMutation({
@@ -56,16 +168,29 @@ const GPSSimulatorPage: React.FC = () => {
       speed: number;
       heading: number;
     }) => busesApi.updateLocation(busId, { latitude, longitude, speed, heading }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['buses'] });
-    },
     onError: (error) => {
       console.error('[GPSSimulator] Error updating location:', error);
     },
   });
 
-  // Calculate heading between two points
-  const calculateHeading = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+  // Start trip mutation
+  const startTripMutation = useMutation({
+    mutationFn: (busId: number) => busesApi.startTrip(busId),
+    onError: (error) => {
+      console.error('[GPSSimulator] Error starting trip:', error);
+    },
+  });
+
+  // End trip mutation
+  const endTripMutation = useMutation({
+    mutationFn: (busId: number) => busesApi.endTrip(busId),
+    onError: (error) => {
+      console.error('[GPSSimulator] Error ending trip:', error);
+    },
+  });
+
+  // Calculate heading between two points in degrees
+  const calculateHeading = useCallback((lat1: number, lng1: number, lat2: number, lng2: number): number => {
     const dLng = (lng2 - lng1) * Math.PI / 180;
     const lat1Rad = lat1 * Math.PI / 180;
     const lat2Rad = lat2 * Math.PI / 180;
@@ -75,120 +200,234 @@ const GPSSimulatorPage: React.FC = () => {
     
     let heading = Math.atan2(y, x) * 180 / Math.PI;
     return (heading + 360) % 360;
-  };
+  }, []);
 
-  // Interpolate position between two stops
-  const interpolatePosition = (
-    stop1: RouteStopInfo,
-    stop2: RouteStopInfo,
-    progress: number
-  ): { lat: number; lng: number } => {
-    return {
-      lat: stop1.latitude + (stop2.latitude - stop1.latitude) * progress,
-      lng: stop1.longitude + (stop2.longitude - stop1.longitude) * progress,
-    };
-  };
-
-  // Get current position for a bus based on its simulation state
-  const getCurrentPosition = useCallback((bus: BusType, simState: BusSimulationState) => {
-    const stops = bus.route?.stops;
+  // Find position along the path based on distance traveled
+  const getPositionOnPath = useCallback((
+    pathPoints: PathPoint[],
+    distanceTraveled: number
+  ): { lat: number; lng: number; pathIndex: number } => {
+    if (pathPoints.length === 0) {
+      return { lat: ISB_BASE_COORDINATES.lat, lng: ISB_BASE_COORDINATES.lng, pathIndex: 0 };
+    }
     
-    if (!stops || stops.length < 2) {
-      // No route - return random Islamabad position (stationary)
-      const offsetLat = (Math.random() - 0.5) * 0.02;
-      const offsetLng = (Math.random() - 0.5) * 0.02;
+    const totalDistance = pathPoints[pathPoints.length - 1].distanceFromStart;
+    
+    // Clamp to valid range
+    const effectiveDistance = Math.max(0, Math.min(distanceTraveled, totalDistance));
+    
+    // Find the two points we're between
+    for (let i = 0; i < pathPoints.length - 1; i++) {
+      const p1 = pathPoints[i];
+      const p2 = pathPoints[i + 1];
+      
+      if (effectiveDistance >= p1.distanceFromStart && effectiveDistance <= p2.distanceFromStart) {
+        // Interpolate between these two points
+        const segmentLength = p2.distanceFromStart - p1.distanceFromStart;
+        const progress = segmentLength > 0 
+          ? (effectiveDistance - p1.distanceFromStart) / segmentLength 
+          : 0;
+        
+        return {
+          lat: p1.lat + (p2.lat - p1.lat) * progress,
+          lng: p1.lng + (p2.lng - p1.lng) * progress,
+          pathIndex: i,
+        };
+      }
+    }
+    
+    // Return last point if we've reached the end
+    const lastPoint = pathPoints[pathPoints.length - 1];
+    return { lat: lastPoint.lat, lng: lastPoint.lng, pathIndex: pathPoints.length - 1 };
+  }, []);
+
+  // Get current position based on simulation state
+  const getCurrentPosition = useCallback((simState: BusSimulationState) => {
+    const { pathPoints, distanceTraveled } = simState;
+    
+    if (!pathPoints || pathPoints.length < 2) {
       return {
-        latitude: ISB_BASE_COORDINATES.lat + offsetLat,
-        longitude: ISB_BASE_COORDINATES.lng + offsetLng,
+        latitude: ISB_BASE_COORDINATES.lat,
+        longitude: ISB_BASE_COORDINATES.lng,
         speed: 0,
         heading: 0,
       };
     }
 
-    const sortedStops = [...stops].sort((a, b) => a.sequence - b.sequence);
-    let currentIndex = simState.currentStopIndex;
-    let nextIndex: number;
-
-    if (simState.direction === 'forward') {
-      nextIndex = currentIndex + 1;
-      if (nextIndex >= sortedStops.length) {
-        nextIndex = currentIndex - 1;
-      }
-    } else {
-      nextIndex = currentIndex - 1;
-      if (nextIndex < 0) {
-        nextIndex = currentIndex + 1;
-      }
+    const position = getPositionOnPath(pathPoints, distanceTraveled);
+    
+    // Calculate heading based on direction of travel
+    let heading = 0;
+    const idx = position.pathIndex;
+    if (idx < pathPoints.length - 1) {
+      const p1 = pathPoints[idx];
+      const p2 = pathPoints[idx + 1];
+      heading = calculateHeading(p1.lat, p1.lng, p2.lat, p2.lng);
     }
-
-    const currentStop = sortedStops[currentIndex];
-    const nextStop = sortedStops[nextIndex];
-
-    const position = interpolatePosition(currentStop, nextStop, simState.progress);
-    const heading = calculateHeading(
-      currentStop.latitude, currentStop.longitude,
-      nextStop.latitude, nextStop.longitude
-    );
 
     return {
       latitude: position.lat,
       longitude: position.lng,
-      speed: params.speedKmh,
+      speed: paramsRef.current.speedKmh,
       heading: Math.round(heading),
     };
-  }, [params.speedKmh]);
+  }, [calculateHeading, getPositionOnPath]);
 
-  // Update simulation state for a bus
-  const advanceSimulation = useCallback((busId: number, bus: BusType) => {
+  // Helper to stop simulation and end trip
+  const stopSimulationAndEndTrip = useCallback(async (busId: number, busName: string, showToast: boolean = true) => {
+    // Clear interval
+    const intervalId = intervalsRef.current.get(busId);
+    if (intervalId) {
+      clearInterval(intervalId);
+      intervalsRef.current.delete(busId);
+    }
+
+    // Remove from state
     setBusSimulations(prev => {
-      const current = prev.get(busId);
-      if (!current || !current.isSimulating) return prev;
-
-      const stops = bus.route?.stops;
-      if (!stops || stops.length < 2) return prev;
-
-      const sortedStops = [...stops].sort((a, b) => a.sequence - b.sequence);
-      let { currentStopIndex, progress, direction } = current;
-
-      // Advance progress
-      progress += 0.1; // 10% progress per tick
-
-      if (progress >= 1) {
-        progress = 0;
-        
-        if (direction === 'forward') {
-          currentStopIndex++;
-          if (currentStopIndex >= sortedStops.length - 1) {
-            direction = 'backward';
-            currentStopIndex = sortedStops.length - 1;
-          }
-        } else {
-          currentStopIndex--;
-          if (currentStopIndex <= 0) {
-            direction = 'forward';
-            currentStopIndex = 0;
-          }
-        }
-      }
-
       const newMap = new Map(prev);
-      newMap.set(busId, { ...current, currentStopIndex, progress, direction });
+      newMap.delete(busId);
       return newMap;
     });
-  }, []);
+
+    // Call end trip API
+    try {
+      await endTripMutation.mutateAsync(busId);
+      console.log(`[GPSSimulator] Trip ended for bus ${busId}`);
+    } catch (error) {
+      console.error(`[GPSSimulator] Failed to end trip for bus ${busId}:`, error);
+    }
+
+    if (showToast) {
+      toast({
+        title: 'Trip Completed',
+        description: `${busName} has reached the destination`,
+      });
+    }
+  }, [endTripMutation, toast]);
+
+  // Advance simulation - called every second
+  const advanceAndUpdateBus = useCallback(async (busId: number) => {
+    const currentSim = simulationsRef.current.get(busId);
+    if (!currentSim || !currentSim.isSimulating) return;
+
+    const { pathPoints, totalRouteDistance, busName } = currentSim;
+    if (!pathPoints || pathPoints.length < 2 || totalRouteDistance <= 0) return;
+
+    // Calculate distance traveled in this tick based on speed
+    // speed is in km/h, interval is in ms
+    // distance = speed * time = (km/h) * (ms / 3600000) * 1000m = speed * interval / 3600 meters
+    const metersPerTick = (paramsRef.current.speedKmh * paramsRef.current.updateIntervalMs) / 3600;
+
+    let { distanceTraveled } = currentSim;
+    
+    // Add distance traveled
+    distanceTraveled += metersPerTick;
+
+    // Check if we've reached the end of the route
+    if (distanceTraveled >= totalRouteDistance) {
+      // Set to exact end position
+      distanceTraveled = totalRouteDistance;
+      
+      // Update state one last time with final position
+      const finalState: BusSimulationState = {
+        ...currentSim,
+        distanceTraveled,
+        isSimulating: false,
+      };
+
+      // Send final position (at the last stop)
+      const finalPosition = getCurrentPosition(finalState);
+      try {
+        await updateLocationMutation.mutateAsync({
+          busId,
+          ...finalPosition,
+        });
+      } catch (error) {
+        console.error(`Failed to send final position for bus ${busId}:`, error);
+      }
+
+      // Stop simulation and end trip
+      await stopSimulationAndEndTrip(busId, busName);
+      return;
+    }
+
+    // Update state
+    const newSimState: BusSimulationState = {
+      ...currentSim,
+      distanceTraveled,
+    };
+
+    setBusSimulations(prev => {
+      const newMap = new Map(prev);
+      newMap.set(busId, newSimState);
+      return newMap;
+    });
+
+    // Calculate and send position
+    const position = getCurrentPosition(newSimState);
+    
+    try {
+      await updateLocationMutation.mutateAsync({
+        busId,
+        ...position,
+      });
+    } catch (error) {
+      console.error(`Failed to update bus ${busId}:`, error);
+    }
+  }, [getCurrentPosition, stopSimulationAndEndTrip, updateLocationMutation]);
 
   // Start simulation for a single bus
   const startBusSimulation = useCallback(async (bus: BusType) => {
-    const hasRoute = bus.route?.stops && bus.route.stops.length >= 2;
+    console.log('[GPSSimulator] Starting simulation for bus:', bus.id, bus.registration_number);
     
-    if (!hasRoute) {
+    // First, fetch the latest bus data to ensure we have the current route
+    let freshBus = bus;
+    try {
+      freshBus = await busesApi.getBus(bus.id);
+      console.log('[GPSSimulator] Fresh bus data:', freshBus);
+    } catch (error) {
+      console.error('Failed to fetch fresh bus data, using cached:', error);
+    }
+
+    // Check if bus has route with stops
+    let stops: RouteStopInfo[] = [];
+    let routeName = '';
+
+    if (freshBus.route?.stops && freshBus.route.stops.length >= 2) {
+      // Bus has route with stops embedded (from BusRoute type)
+      stops = [...freshBus.route.stops].sort((a, b) => a.sequence - b.sequence);
+      routeName = freshBus.route.name;
+      console.log('[GPSSimulator] Using embedded route stops:', stops.length);
+    } else if (freshBus.route_id && routes) {
+      // Try to get stops from routes data
+      const route = routes.find(r => r.id === freshBus.route_id);
+      if (route?.route_stops && route.route_stops.length >= 2) {
+        // Transform RouteStop[] to RouteStopInfo[]
+        stops = route.route_stops
+          .filter(rs => rs.stop) // Only include stops with stop data
+          .sort((a, b) => a.sequence_number - b.sequence_number)
+          .map(rs => ({
+            sequence: rs.sequence_number,
+            stop_id: rs.stop_id,
+            stop_name: rs.stop?.name || 'Unknown',
+            latitude: rs.stop?.latitude || 0,
+            longitude: rs.stop?.longitude || 0,
+            distance_from_prev_meters: rs.distance_from_prev || 0,
+          }));
+        routeName = route.name;
+        console.log('[GPSSimulator] Using stops from routes query:', stops.length);
+      }
+    }
+
+    if (stops.length < 2) {
       // No route - just set a static position in Islamabad
+      console.log('[GPSSimulator] No route found, setting static position');
       const offsetLat = (Math.random() - 0.5) * 0.02;
       const offsetLng = (Math.random() - 0.5) * 0.02;
       
       try {
         await updateLocationMutation.mutateAsync({
-          busId: bus.id,
+          busId: freshBus.id,
           latitude: ISB_BASE_COORDINATES.lat + offsetLat,
           longitude: ISB_BASE_COORDINATES.lng + offsetLng,
           speed: 0,
@@ -196,7 +435,7 @@ const GPSSimulatorPage: React.FC = () => {
         });
         toast({
           title: 'Static Position Set',
-          description: `${bus.registration_number} placed in Islamabad (no route - stationary)`,
+          description: `${freshBus.registration_number} placed in Islamabad (no route with stops)`,
         });
       } catch (error) {
         console.error('Failed to set static position:', error);
@@ -204,65 +443,148 @@ const GPSSimulatorPage: React.FC = () => {
       return;
     }
 
-    // Has route - start continuous simulation
+    // Fetch detailed road geometry from Mapbox Directions API
+    console.log('[GPSSimulator] Fetching road geometry for', stops.length, 'stops...');
+    let pathPoints: PathPoint[] = [];
+    let totalRouteDistance = 0;
+    
+    try {
+      pathPoints = await fetchRouteGeometry(stops);
+      if (pathPoints.length > 0) {
+        totalRouteDistance = pathPoints[pathPoints.length - 1].distanceFromStart;
+      }
+      console.log('[GPSSimulator] Got', pathPoints.length, 'path points, total distance:', totalRouteDistance, 'm');
+    } catch (error) {
+      console.error('[GPSSimulator] Failed to fetch route geometry, falling back to straight lines:', error);
+      // Fallback: create path points from stops directly (straight lines between stops)
+      let cumulativeDistance = 0;
+      pathPoints = stops.map((stop, index) => {
+        if (index > 0) {
+          cumulativeDistance += calculateDistance(
+            stops[index - 1].latitude, stops[index - 1].longitude,
+            stop.latitude, stop.longitude
+          );
+        }
+        return {
+          lat: stop.latitude,
+          lng: stop.longitude,
+          distanceFromStart: cumulativeDistance,
+        };
+      });
+      totalRouteDistance = cumulativeDistance;
+    }
+
+    if (pathPoints.length < 2) {
+      console.error('[GPSSimulator] Not enough path points');
+      return;
+    }
+
+    // Create simulation state - start at beginning of route
     const newState: BusSimulationState = {
-      busId: bus.id,
+      busId: freshBus.id,
+      busName: freshBus.registration_number,
+      routeName: routeName,
       isSimulating: true,
-      currentStopIndex: 0,
-      progress: 0,
-      direction: 'forward',
-      intervalId: null,
+      currentPathIndex: 0, // Start at first path point
+      distanceTraveled: 0, // Start at the beginning
+      totalRouteDistance: totalRouteDistance,
+      pathPoints: pathPoints,
+      stops: stops,
     };
 
-    const intervalId = setInterval(async () => {
-      advanceSimulation(bus.id, bus);
-      
-      const simState = busSimulations.get(bus.id) || newState;
-      const position = getCurrentPosition(bus, simState);
-      
-      try {
-        await updateLocationMutation.mutateAsync({
-          busId: bus.id,
-          ...position,
-        });
-      } catch (error) {
-        console.error(`Failed to update bus ${bus.id}:`, error);
-      }
-    }, params.updateIntervalMs);
+    // Call start trip API first
+    try {
+      await startTripMutation.mutateAsync(freshBus.id);
+      console.log(`[GPSSimulator] Trip started for bus ${freshBus.id}`);
+    } catch (error) {
+      console.error(`[GPSSimulator] Failed to start trip for bus ${freshBus.id}:`, error);
+      toast({
+        title: 'Failed to Start Trip',
+        description: `Could not start trip for ${freshBus.registration_number}. The bus may already be on a trip.`,
+        variant: 'destructive',
+      });
+      return;
+    }
 
-    newState.intervalId = intervalId;
+    // Update state
     setBusSimulations(prev => {
       const newMap = new Map(prev);
-      newMap.set(bus.id, newState);
+      newMap.set(freshBus.id, newState);
       return newMap;
     });
 
-    toast({
-      title: 'Simulation Started',
-      description: `${bus.registration_number} is now following its route`,
-    });
-  }, [advanceSimulation, getCurrentPosition, params.updateIntervalMs, toast, updateLocationMutation, busSimulations]);
+    // Clear any existing interval
+    const existingInterval = intervalsRef.current.get(freshBus.id);
+    if (existingInterval) {
+      clearInterval(existingInterval);
+    }
 
-  // Stop simulation for a single bus
-  const stopBusSimulation = useCallback((busId: number, busName: string) => {
+    // Start new interval - update every second
+    const intervalId = setInterval(() => {
+      advanceAndUpdateBus(freshBus.id);
+    }, params.updateIntervalMs);
+
+    intervalsRef.current.set(freshBus.id, intervalId);
+
+    // Send initial position (at first stop)
+    const position = getCurrentPosition(newState);
+    try {
+      await updateLocationMutation.mutateAsync({
+        busId: freshBus.id,
+        ...position,
+      });
+    } catch (error) {
+      console.error('Failed to send initial position:', error);
+    }
+
+    toast({
+      title: 'Trip Started',
+      description: `${freshBus.registration_number} starting from ${stops[0].stop_name} (${stops.length} stops)`,
+    });
+  }, [advanceAndUpdateBus, getCurrentPosition, params.updateIntervalMs, routes, startTripMutation, toast, updateLocationMutation]);
+
+  // Stop simulation for a single bus (manual stop)
+  const stopBusSimulation = useCallback(async (busId: number, busName: string) => {
+    // Clear interval
+    const intervalId = intervalsRef.current.get(busId);
+    if (intervalId) {
+      clearInterval(intervalId);
+      intervalsRef.current.delete(busId);
+    }
+
+    // Remove from state
     setBusSimulations(prev => {
-      const current = prev.get(busId);
-      if (current?.intervalId) {
-        clearInterval(current.intervalId);
-      }
       const newMap = new Map(prev);
       newMap.delete(busId);
       return newMap;
     });
 
+    // Call end trip API
+    try {
+      await endTripMutation.mutateAsync(busId);
+      console.log(`[GPSSimulator] Trip ended for bus ${busId}`);
+    } catch (error) {
+      console.error(`[GPSSimulator] Failed to end trip for bus ${busId}:`, error);
+    }
+
     toast({
-      title: 'Simulation Stopped',
-      description: `${busName} simulation stopped`,
+      title: 'Trip Stopped',
+      description: `${busName} trip has been stopped`,
     });
-  }, [toast]);
+  }, [endTripMutation, toast]);
+
+  // Refresh buses manually
+  const handleRefresh = useCallback(async () => {
+    console.log('[GPSSimulator] Refreshing buses...');
+    await refetchBuses();
+    toast({
+      title: 'Refreshed',
+      description: 'Bus data has been refreshed',
+    });
+  }, [refetchBuses, toast]);
 
   // Start all buses simulation
-  const startAllSimulation = useCallback(() => {
+  const startAllSimulation = useCallback(async () => {
     if (!buses || buses.length === 0) {
       toast({
         title: 'No Buses',
@@ -283,11 +605,14 @@ const GPSSimulatorPage: React.FC = () => {
     }
 
     setGlobalSimulating(true);
-    activeBuses.forEach(bus => {
+    
+    // Start simulations sequentially
+    for (const bus of activeBuses) {
       if (!busSimulations.has(bus.id)) {
-        startBusSimulation(bus);
+        await startBusSimulation(bus);
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
-    });
+    }
 
     toast({
       title: 'All Simulations Started',
@@ -297,38 +622,68 @@ const GPSSimulatorPage: React.FC = () => {
 
   // Stop all buses simulation
   const stopAllSimulation = useCallback(() => {
-    busSimulations.forEach((sim) => {
-      if (sim.intervalId) {
-        clearInterval(sim.intervalId);
-      }
+    // Clear all intervals
+    intervalsRef.current.forEach((intervalId) => {
+      clearInterval(intervalId);
     });
+    intervalsRef.current.clear();
+
+    // Clear state
     setBusSimulations(new Map());
     setGlobalSimulating(false);
-
-    if (globalIntervalRef.current) {
-      clearInterval(globalIntervalRef.current);
-      globalIntervalRef.current = null;
-    }
 
     toast({
       title: 'All Simulations Stopped',
       description: 'All bus simulations have been stopped',
     });
-  }, [busSimulations, toast]);
+  }, [toast]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      busSimulations.forEach((sim) => {
-        if (sim.intervalId) {
-          clearInterval(sim.intervalId);
-        }
+      intervalsRef.current.forEach((intervalId) => {
+        clearInterval(intervalId);
       });
-      if (globalIntervalRef.current) {
-        clearInterval(globalIntervalRef.current);
-      }
     };
   }, []);
+
+  // Helper to check if bus has route with stops
+  const busHasRoute = useCallback((bus: BusType): boolean => {
+    // Check embedded route (BusRoute type has 'stops')
+    if (bus.route?.stops && bus.route.stops.length >= 2) {
+      return true;
+    }
+    // Check routes data (Route type has 'route_stops')
+    if (bus.route_id && routes) {
+      const route = routes.find(r => r.id === bus.route_id);
+      if (route?.route_stops && route.route_stops.length >= 2) {
+        // Check if stops have location data
+        const validStops = route.route_stops.filter(rs => rs.stop);
+        return validStops.length >= 2;
+      }
+    }
+    return false;
+  }, [routes]);
+
+  // Get route info for display
+  const getBusRouteInfo = useCallback((bus: BusType): { name: string; stopCount: number } | null => {
+    // Check embedded route (BusRoute type)
+    if (bus.route?.stops && bus.route.stops.length >= 2) {
+      return { name: bus.route.name, stopCount: bus.route.stops.length };
+    }
+    // Check routes data (Route type)
+    if (bus.route_id && routes) {
+      const route = routes.find(r => r.id === bus.route_id);
+      if (route?.route_stops && route.route_stops.length >= 2) {
+        const validStops = route.route_stops.filter(rs => rs.stop);
+        return { name: route.name, stopCount: validStops.length };
+      }
+      if (route) {
+        return { name: route.name, stopCount: route.route_stops?.length || 0 };
+      }
+    }
+    return null;
+  }, [routes]);
 
   if (isLoading) {
     return (
@@ -350,8 +705,8 @@ const GPSSimulatorPage: React.FC = () => {
   }
 
   const activeBuses = buses?.filter(b => b.status === 'active') || [];
-  const busesWithRoute = activeBuses.filter(b => b.route?.stops && b.route.stops.length >= 2);
-  const busesWithoutRoute = activeBuses.filter(b => !b.route?.stops || b.route.stops.length < 2);
+  const busesWithRoute = activeBuses.filter(b => busHasRoute(b));
+  const busesWithoutRoute = activeBuses.filter(b => !busHasRoute(b));
 
   return (
     <div className="space-y-6">
@@ -363,12 +718,12 @@ const GPSSimulatorPage: React.FC = () => {
             GPS Simulator
           </h1>
           <p className="text-muted-foreground mt-1">
-            Simulate GPS location updates for testing. Buses with routes will follow their stops.
+            Simulate GPS location updates. Buses follow their routes from start to end.
           </p>
         </div>
-        <Button variant="outline" onClick={() => refetch()} className="gap-2">
+        <Button variant="outline" onClick={handleRefresh} className="gap-2">
           <RefreshCw className="h-4 w-4" />
-          Refresh
+          Refresh Buses
         </Button>
       </div>
 
@@ -400,8 +755,8 @@ const GPSSimulatorPage: React.FC = () => {
                 value={params.updateIntervalMs}
                 onChange={(e) => setParams(p => ({ ...p, updateIntervalMs: Number(e.target.value) }))}
                 className="h-9"
-                min={500}
-                step={500}
+                min={100}
+                step={100}
               />
             </div>
             <div className="flex items-end">
@@ -442,7 +797,7 @@ const GPSSimulatorPage: React.FC = () => {
             </div>
             <div className="text-center p-3 bg-white rounded-lg border">
               <AlertTriangle className="h-5 w-5 mx-auto mb-1 text-orange-500" />
-              <p className="text-xs text-muted-foreground">No Route (Static)</p>
+              <p className="text-xs text-muted-foreground">No Route</p>
               <p className="text-lg font-bold text-orange-500">{busesWithoutRoute.length}</p>
             </div>
             <div className="text-center p-3 bg-white rounded-lg border">
@@ -461,14 +816,14 @@ const GPSSimulatorPage: React.FC = () => {
             <Route className="h-5 w-5 text-green-600" />
             Buses with Routes
             <span className="text-sm font-normal text-muted-foreground">
-              (will follow route stops)
+              (will follow route from start to end)
             </span>
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {busesWithRoute.map(bus => {
               const simState = busSimulations.get(bus.id);
               const isSimulating = simState?.isSimulating || false;
-              const stopCount = bus.route?.stops?.length || 0;
+              const routeInfo = getBusRouteInfo(bus);
 
               return (
                 <Card key={bus.id} className={cn(
@@ -493,21 +848,27 @@ const GPSSimulatorPage: React.FC = () => {
                     <div className="text-sm space-y-1">
                       <div className="flex items-center gap-2">
                         <Route className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium">{bus.route?.name}</span>
-                        <span className="text-muted-foreground">({bus.route?.code})</span>
+                        <span className="font-medium">{routeInfo?.name}</span>
                       </div>
                       <div className="flex items-center gap-2 text-muted-foreground">
                         <MapPin className="h-4 w-4" />
-                        <span>{stopCount} stops</span>
+                        <span>{routeInfo?.stopCount || 0} stops</span>
                       </div>
                       {isSimulating && simState && (
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Clock className="h-4 w-4" />
-                          <span>
-                            Stop {simState.currentStopIndex + 1}/{stopCount} • 
-                            {simState.direction === 'forward' ? ' →' : ' ←'}
-                          </span>
-                        </div>
+                        <>
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <Clock className="h-4 w-4" />
+                            <span>
+                              {simState.stops.length} stops • Simulating
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Navigation className="h-3 w-3" />
+                            <span>
+                              {Math.round(simState.distanceTraveled)}m / {Math.round(simState.totalRouteDistance)}m ({Math.round(simState.distanceTraveled / simState.totalRouteDistance * 100)}%)
+                            </span>
+                          </div>
+                        </>
                       )}
                       {bus.last_location && (
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -552,39 +913,46 @@ const GPSSimulatorPage: React.FC = () => {
             <AlertTriangle className="h-5 w-5 text-orange-500" />
             Buses without Routes
             <span className="text-sm font-normal text-muted-foreground">
-              (static position only - will be placed in Islamabad)
+              (assign a route with stops first)
             </span>
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {busesWithoutRoute.map(bus => (
-              <Card key={bus.id} className="border-orange-200 bg-orange-50/30">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center gap-2">
-                    <Bus className="h-5 w-5 text-orange-600" />
-                    <CardTitle className="text-base">{bus.registration_number}</CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="text-sm text-orange-600 bg-orange-100 p-2 rounded">
-                    No route assigned. Bus will be placed at a random location in Islamabad and remain stationary.
-                  </div>
-                  {bus.last_location && (
-                    <div className="text-xs text-muted-foreground">
-                      Last seen: {new Date(bus.last_location.timestamp).toLocaleString()}
+            {busesWithoutRoute.map(bus => {
+              const routeInfo = getBusRouteInfo(bus);
+              return (
+                <Card key={bus.id} className="border-orange-200 bg-orange-50/30">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center gap-2">
+                      <Bus className="h-5 w-5 text-orange-600" />
+                      <CardTitle className="text-base">{bus.registration_number}</CardTitle>
                     </div>
-                  )}
-                  <Button 
-                    variant="outline"
-                    size="sm" 
-                    className="w-full gap-2"
-                    onClick={() => startBusSimulation(bus)}
-                  >
-                    <MapPin className="h-4 w-4" />
-                    Set Static Position
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="text-sm text-orange-600 bg-orange-100 p-2 rounded">
+                      {routeInfo ? (
+                        <>Route "{routeInfo.name}" has no stops. Add stops to the route first.</>
+                      ) : (
+                        <>No route assigned. Assign a route with stops in the Buses page.</>
+                      )}
+                    </div>
+                    {bus.last_location && (
+                      <div className="text-xs text-muted-foreground">
+                        Last seen: {new Date(bus.last_location.timestamp).toLocaleString()}
+                      </div>
+                    )}
+                    <Button 
+                      variant="outline"
+                      size="sm" 
+                      className="w-full gap-2"
+                      onClick={() => startBusSimulation(bus)}
+                    >
+                      <MapPin className="h-4 w-4" />
+                      Set Static Position
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
       )}

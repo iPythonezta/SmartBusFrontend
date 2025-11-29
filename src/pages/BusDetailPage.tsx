@@ -206,6 +206,7 @@ const BusDetailPage: React.FC = () => {
                 height="100%"
                 interactive={true}
                 showControls={true}
+                fitToBounds={!!bus.route?.stops && bus.route.stops.length > 0}
               />
             </div>
 

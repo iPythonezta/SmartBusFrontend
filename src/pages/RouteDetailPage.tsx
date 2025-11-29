@@ -373,6 +373,7 @@ const RouteDetailPageEnhanced: React.FC = () => {
             height="500px"
             interactive={true}
             showControls={true}
+            fitToBounds={mapStops.length > 0}
           />
         </CardContent>
       </Card>
