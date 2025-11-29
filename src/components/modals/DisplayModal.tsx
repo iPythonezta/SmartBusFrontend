@@ -23,10 +23,10 @@ import type { DisplayUnit, Stop } from '@/types';
 import { stopsApi } from '@/services/api';
 
 const displaySchema = z.object({
-  name: z.string().min(1, 'Name is required'),
+  name: z.string().min(2, 'Name must be at least 2 characters'),
   stop_id: z.string().min(1, 'Stop is required'),
   location: z.string().optional(),
-  status: z.enum(['online', 'offline']),
+  status: z.enum(['online', 'offline', 'error']),
 });
 
 type DisplayFormData = z.infer<typeof displaySchema>;
@@ -79,7 +79,7 @@ const DisplayModal: React.FC<DisplayModalProps> = ({
       if (display) {
         reset({
           name: display.name,
-          stop_id: display.stop_id,
+          stop_id: display.stop_id.toString(), // Convert number to string for form
           location: display.location || '',
           status: display.status,
         });
@@ -162,7 +162,7 @@ const DisplayModal: React.FC<DisplayModalProps> = ({
             <Label htmlFor="status">Status</Label>
             <Select
               value={watchedStatus}
-              onValueChange={(value) => setValue('status', value as 'online' | 'offline')}
+              onValueChange={(value) => setValue('status', value as 'online' | 'offline' | 'error')}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select status" />
@@ -178,6 +178,12 @@ const DisplayModal: React.FC<DisplayModalProps> = ({
                   <div className="flex items-center gap-2">
                     <div className="h-2 w-2 rounded-full bg-gray-400" />
                     Offline
+                  </div>
+                </SelectItem>
+                <SelectItem value="error">
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-red-500" />
+                    Error
                   </div>
                 </SelectItem>
               </SelectContent>

@@ -133,7 +133,7 @@ const AdScheduleModal: React.FC<AdScheduleModalProps> = ({
 
   const selectAllDisplays = () => {
     if (displays) {
-      setSelectedDisplayIds(displays.map(d => d.id));
+      setSelectedDisplayIds(displays.map(d => d.id.toString()));
     }
   };
 
@@ -223,11 +223,12 @@ const AdScheduleModal: React.FC<AdScheduleModalProps> = ({
             </div>
             <div className="border rounded-lg max-h-40 overflow-y-auto">
               {displays?.map((display: DisplayUnit) => {
-                const isSelected = selectedDisplayIds.includes(display.id);
+                const displayIdStr = display.id.toString();
+                const isSelected = selectedDisplayIds.includes(displayIdStr);
                 return (
                   <div
                     key={display.id}
-                    onClick={() => toggleDisplay(display.id)}
+                    onClick={() => toggleDisplay(displayIdStr)}
                     className={`flex items-center gap-3 p-2 cursor-pointer hover:bg-gray-50 border-b last:border-b-0 ${
                       isSelected ? 'bg-blue-50' : ''
                     }`}
@@ -240,7 +241,8 @@ const AdScheduleModal: React.FC<AdScheduleModalProps> = ({
                     <Monitor className="h-4 w-4 text-gray-500" />
                     <span className="flex-1 text-sm">{display.name}</span>
                     <span className={`h-2 w-2 rounded-full ${
-                      display.status === 'online' ? 'bg-green-500' : 'bg-gray-400'
+                      display.status === 'online' ? 'bg-green-500' : 
+                      display.status === 'error' ? 'bg-red-500' : 'bg-gray-400'
                     }`} />
                   </div>
                 );

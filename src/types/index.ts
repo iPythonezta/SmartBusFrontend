@@ -200,30 +200,121 @@ export interface EndTripResponse {
 
 // Display Unit types
 export interface DisplayUnit {
-  id: string;
+  id: number;
   name: string;
-  stop_id: string;
+  stop_id: number;
   stop?: Stop;
-  status: 'online' | 'offline';
+  status: 'online' | 'offline' | 'error';
   location?: string;
+  last_heartbeat?: string;
   created_at: string;
   updated_at: string;
 }
 
-export interface DisplaySimulation {
-  display_id: string;
+export interface CreateDisplayInput {
+  name: string;
+  stop_id: number;
+  location?: string;
+  status?: 'online' | 'offline' | 'error';
+}
+
+// Display Content types (for SMD)
+export interface UpcomingBus {
+  bus_id: number;
+  registration_number: string;
+  route_id: number;
+  route_name: string;
+  route_code: string;
+  route_color: string;
+  eta_minutes: number;
+  distance_meters: number;
+  arrival_status: 'arriving' | 'approaching' | 'on-route';
+}
+
+export interface DisplayAnnouncement {
+  id: number;
+  title: string;
+  message: string;
+  message_ur?: string;
+  severity: 'info' | 'warning' | 'emergency';
+}
+
+export interface DisplayAdvertisement {
+  id: number;
+  title: string;
+  content_url: string;
+  media_type: 'image' | 'youtube';
+  duration_seconds: number;
+  priority: number;
+}
+
+export interface DisplayContent {
+  display: {
+    id: number;
+    name: string;
+    stop_id: number;
+  };
   stop: Stop;
-  route?: Route;
-  etas: BusETA[];
-  announcements: Announcement[];
-  ads: AdContent[];
+  upcoming_buses: UpcomingBus[];
+  announcements: DisplayAnnouncement[];
+  advertisements: DisplayAdvertisement[];
   timestamp: string;
 }
 
-export interface CreateDisplayInput {
-  name: string;
-  stop_id: string;
-  location?: string;
+// Stop ETA types
+export interface StopETAResponse {
+  stop: {
+    id: number;
+    name: string;
+  };
+  etas: StopBusETA[];
+  timestamp: string;
+}
+
+export interface StopBusETA {
+  bus_id: number;
+  registration_number: string;
+  route_id: number;
+  route_name: string;
+  route_code: string;
+  route_color: string;
+  eta_minutes: number;
+  distance_meters: number;
+  current_latitude: number;
+  current_longitude: number;
+}
+
+// Route ETA types
+export interface RouteETAResponse {
+  route: {
+    id: number;
+    name: string;
+    code: string;
+    color: string;
+  };
+  buses: RouteBusETA[];
+  timestamp: string;
+}
+
+export interface RouteBusETA {
+  bus_id: number;
+  registration_number: string;
+  current_stop_sequence: number;
+  next_stops: {
+    stop_id: number;
+    stop_name: string;
+    sequence: number;
+    eta_minutes: number;
+    distance_meters: number;
+  }[];
+}
+
+// Heartbeat response
+export interface HeartbeatResponse {
+  id: number;
+  status: 'online' | 'offline' | 'error';
+  last_heartbeat: string;
+  message: string;
 }
 
 // Advertisement types

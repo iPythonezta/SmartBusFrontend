@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import {
@@ -18,34 +20,37 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react';
+import { displaysApi } from '@/services/api';
+import type { UpcomingBus, DisplayAnnouncement, DisplayAdvertisement } from '@/types';
 
 // =============================================================================
-// DUMMY DATA - All data is generated here, no backend calls
+// DATA TYPES - Mapped from API responses
 // =============================================================================
 
-interface DummyBus {
+interface DisplayBus {
   bus_name: string;
   eta_minutes: number;
-  status: 'on-time' | 'delayed' | 'approaching';
+  status: 'arriving' | 'approaching' | 'on-route';
 }
 
-interface DummyRoute {
+interface DisplayRoute {
   route_name: string;
   route_code: string;
   color: string;
-  buses: DummyBus[];
+  buses: DisplayBus[];
 }
 
-interface DummyAnnouncement {
-  id: string;
+interface DisplayAnnouncementLocal {
+  id: number;
   message: string;
   message_ur: string;
-  severity: 'critical' | 'moderate' | 'info';
+  severity: 'info' | 'warning' | 'emergency';
+  title: string;
   active: boolean;
 }
 
-interface DummyAd {
-  id: string;
+interface DisplayAdLocal {
+  id: number;
   title: string;
   media_type: 'image' | 'youtube';
   content_url: string;
@@ -65,121 +70,6 @@ const getYouTubeVideoId = (url: string): string | null => {
   return null;
 };
 
-// Dummy Routes with upcoming buses
-const DUMMY_ROUTES: DummyRoute[] = [
-  {
-    route_name: 'Saddar to Faisal Mosque',
-    route_code: 'R-11',
-    color: '#0ea5e9',
-    buses: [
-      { bus_name: 'ISB-1142', eta_minutes: 3, status: 'approaching' },
-      { bus_name: 'ISB-1156', eta_minutes: 12, status: 'on-time' },
-      { bus_name: 'ISB-1189', eta_minutes: 24, status: 'on-time' },
-      { bus_name: 'ISB-1203', eta_minutes: 38, status: 'delayed' },
-      { bus_name: 'ISB-1217', eta_minutes: 52, status: 'on-time' },
-    ],
-  },
-  {
-    route_name: 'F-10 Markaz to PIMS',
-    route_code: 'R-22',
-    color: '#8b5cf6',
-    buses: [
-      { bus_name: 'ISB-2201', eta_minutes: 6, status: 'on-time' },
-      { bus_name: 'ISB-2215', eta_minutes: 18, status: 'on-time' },
-      { bus_name: 'ISB-2234', eta_minutes: 31, status: 'delayed' },
-      { bus_name: 'ISB-2248', eta_minutes: 45, status: 'on-time' },
-    ],
-  },
-  {
-    route_name: 'G-9 to Blue Area',
-    route_code: 'R-33',
-    color: '#f59e0b',
-    buses: [
-      { bus_name: 'ISB-3301', eta_minutes: 8, status: 'on-time' },
-      { bus_name: 'ISB-3318', eta_minutes: 22, status: 'approaching' },
-      { bus_name: 'ISB-3329', eta_minutes: 41, status: 'on-time' },
-    ],
-  },
-];
-
-// Dummy Announcements
-const DUMMY_ANNOUNCEMENTS: DummyAnnouncement[] = [
-  {
-    id: 'critical-1',
-    message: '⚠️ EMERGENCY: All services temporarily suspended due to VIP movement. Resume in 30 minutes.',
-    message_ur: '⚠️ ایمرجنسی: وی آئی پی نقل و حرکت کی وجہ سے تمام سروسز عارضی طور پر معطل۔ 30 منٹ میں دوبارہ شروع۔',
-    severity: 'critical',
-    active: false, // Toggle this to test critical announcements
-  },
-  {
-    id: 'moderate-1',
-    message: '🚌 Route R-11 is running 10 minutes behind schedule due to traffic congestion.',
-    message_ur: '🚌 روٹ R-11 ٹریفک کی وجہ سے 10 منٹ تاخیر سے چل رہی ہے۔',
-    severity: 'moderate',
-    active: true,
-  },
-  {
-    id: 'moderate-2',
-    message: '🔧 Scheduled maintenance on Route R-33 tonight from 11 PM to 5 AM.',
-    message_ur: '🔧 روٹ R-33 پر آج رات 11 بجے سے صبح 5 بجے تک شیڈول مینٹیننس۔',
-    severity: 'moderate',
-    active: true,
-  },
-  {
-    id: 'info-1',
-    message: '😷 Please wear a mask inside the bus for your safety.',
-    message_ur: '😷 اپنی حفاظت کے لیے بس میں ماسک پہنیں۔',
-    severity: 'info',
-    active: true,
-  },
-  {
-    id: 'info-2',
-    message: '📱 Download the Smart Bus app for real-time tracking!',
-    message_ur: '📱 ریئل ٹائم ٹریکنگ کے لیے سمارٹ بس ایپ ڈاؤن لوڈ کریں!',
-    severity: 'info',
-    active: true,
-  },
-];
-
-// Dummy Ads - supports image, video, and YouTube
-const DUMMY_ADS: DummyAd[] = [
-  {
-    id: 'ad-1',
-    title: 'Jazz 4G - Digital Pakistan',
-    media_type: 'youtube',
-    content_url: 'https://youtu.be/J4Fwn0WvQf0',
-    duration_seconds: 30, // YouTube ads capped at 30s for display
-  },
-  {
-    id: 'ad-2',
-    title: 'Jazz 4G - Stay Connected',
-    media_type: 'image',
-    content_url: 'https://placehold.co/1920x1080/e11d48/ffffff?text=Jazz+4G+-+Pakistan%27s+Fastest+Network',
-    duration_seconds: 10,
-  },
-  {
-    id: 'ad-3',
-    title: 'HBL - Banking Made Easy',
-    media_type: 'image',
-    content_url: 'https://placehold.co/1920x1080/059669/ffffff?text=HBL+-+Banking+On+The+Go',
-    duration_seconds: 10,
-  },
-  {
-    id: 'ad-4',
-    title: 'Pepsi - Refresh Your Day',
-    media_type: 'image',
-    content_url: 'https://placehold.co/1920x1080/1d4ed8/ffffff?text=Pepsi+-+Refresh+Your+Journey',
-    duration_seconds: 8,
-  },
-  {
-    id: 'ad-5',
-    title: 'Telenor - Internet For All',
-    media_type: 'youtube',
-    content_url: 'https://www.youtube.com/watch?v=nmNSHPeRDRc',
-    duration_seconds: 30,
-  },
-];
-
 // SMD Hardware Specs (for status display)
 const SMD_SPECS = {
   resolution: '1920×1080',
@@ -191,6 +81,63 @@ const SMD_SPECS = {
 };
 
 // =============================================================================
+// HELPER FUNCTIONS - Transform API data to display format
+// =============================================================================
+
+// Group buses by route for display
+const groupBusesByRoute = (buses: UpcomingBus[]): DisplayRoute[] => {
+  const routeMap = new Map<number, DisplayRoute>();
+  
+  buses.forEach((bus) => {
+    if (!routeMap.has(bus.route_id)) {
+      routeMap.set(bus.route_id, {
+        route_name: bus.route_name,
+        route_code: bus.route_code,
+        color: bus.route_color,
+        buses: [],
+      });
+    }
+    
+    const route = routeMap.get(bus.route_id)!;
+    route.buses.push({
+      bus_name: bus.registration_number,
+      eta_minutes: bus.eta_minutes,
+      status: bus.arrival_status,
+    });
+  });
+  
+  // Sort buses within each route by ETA
+  routeMap.forEach((route) => {
+    route.buses.sort((a, b) => a.eta_minutes - b.eta_minutes);
+  });
+  
+  return Array.from(routeMap.values());
+};
+
+// Transform announcements from API format
+const transformAnnouncements = (announcements: DisplayAnnouncement[]): DisplayAnnouncementLocal[] => {
+  return announcements.map((a) => ({
+    id: a.id,
+    title: a.title,
+    message: a.message,
+    message_ur: a.message_ur || a.message, // Fallback to English if no Urdu
+    severity: a.severity,
+    active: true, // API only returns active announcements
+  }));
+};
+
+// Transform ads from API format
+const transformAds = (ads: DisplayAdvertisement[]): DisplayAdLocal[] => {
+  return ads.map((a) => ({
+    id: a.id,
+    title: a.title,
+    media_type: a.media_type,
+    content_url: a.content_url,
+    duration_seconds: a.duration_seconds,
+  }));
+};
+
+// =============================================================================
 // SLIDE TYPES & TIMING
 // =============================================================================
 
@@ -198,7 +145,7 @@ type SlideType = 'route' | 'announcement' | 'ad';
 
 interface Slide {
   type: SlideType;
-  data: DummyRoute | DummyAnnouncement | DummyAd;
+  data: DisplayRoute | DisplayAnnouncementLocal | DisplayAdLocal;
   duration: number; // in seconds
 }
 
@@ -206,12 +153,30 @@ const ROUTE_SLIDE_DURATION = 10; // seconds
 const ANNOUNCEMENT_SLIDE_DURATION = 8; // seconds
 const MAX_AD_DURATION = 30; // seconds
 const AD_BUDGET_PER_CYCLE = 60; // Total seconds for ads per cycle
+const REFRESH_INTERVAL = 30000; // Refresh data every 30 seconds
 
 // =============================================================================
 // MAIN COMPONENT
 // =============================================================================
 
 const SMDSimulatorPage: React.FC = () => {
+  // Get display ID from URL params
+  const { displayId } = useParams<{ displayId: string }>();
+  const numericDisplayId = displayId ? parseInt(displayId, 10) : null;
+
+  // Fetch display content from API
+  const { 
+    data: displayContent, 
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: ['displayContent', numericDisplayId],
+    queryFn: () => displaysApi.getDisplayContent(numericDisplayId!),
+    enabled: !!numericDisplayId,
+    refetchInterval: REFRESH_INTERVAL, // Auto-refresh every 30 seconds
+    staleTime: 10000, // Consider data stale after 10 seconds
+  });
+
   // State
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -219,6 +184,11 @@ const SMDSimulatorPage: React.FC = () => {
   const [showControls, setShowControls] = useState(true);
   const [language, setLanguage] = useState<'en' | 'ur'>('en');
   const [isMuted, setIsMuted] = useState(true); // Audio muted by default
+  
+  // Transformed data from API
+  const [routes, setRoutes] = useState<DisplayRoute[]>([]);
+  const [announcements, setAnnouncements] = useState<DisplayAnnouncementLocal[]>([]);
+  const [ads, setAds] = useState<DisplayAdLocal[]>([]);
   
   // Slide management - separate content and ads
   const [contentSlides, setContentSlides] = useState<Slide[]>([]); // Routes + Announcements
@@ -229,22 +199,37 @@ const SMDSimulatorPage: React.FC = () => {
   const [isShowingAd, setIsShowingAd] = useState(false);
   const [currentAdIndex, setCurrentAdIndex] = useState(0);
   const [adBudgetRemaining, setAdBudgetRemaining] = useState(AD_BUDGET_PER_CYCLE);
+  const [adsShownThisCycle, setAdsShownThisCycle] = useState<Set<number>>(new Set()); // Track which ads have been shown
   const adStartIndexRef = useRef(0); // Remember where ads started in this cycle
   
   // Critical announcement state
-  const [criticalAnnouncement, setCriticalAnnouncement] = useState<DummyAnnouncement | null>(null);
+  const [criticalAnnouncement, setCriticalAnnouncement] = useState<DisplayAnnouncementLocal | null>(null);
   const [showCritical, setShowCritical] = useState(false);
   const pausedStateRef = useRef<{ contentIndex: number; wasShowingAd: boolean; adIndex: number }>({
     contentIndex: 0,
     wasShowingAd: false,
     adIndex: 0,
   });
+
+  // =============================================================================
+  // TRANSFORM API DATA TO LOCAL STATE
+  // =============================================================================
   
-  // ETA countdown (simulated)
-  const [routes, setRoutes] = useState<DummyRoute[]>(DUMMY_ROUTES);
-  
-  // Announcements state (for toggling in demo)
-  const [announcements, setAnnouncements] = useState<DummyAnnouncement[]>(DUMMY_ANNOUNCEMENTS);
+  useEffect(() => {
+    if (displayContent) {
+      // Transform and set routes
+      const transformedRoutes = groupBusesByRoute(displayContent.upcoming_buses);
+      setRoutes(transformedRoutes);
+      
+      // Transform and set announcements
+      const transformedAnnouncements = transformAnnouncements(displayContent.announcements);
+      setAnnouncements(transformedAnnouncements);
+      
+      // Transform and set ads
+      const transformedAds = transformAds(displayContent.advertisements);
+      setAds(transformedAds);
+    }
+  }, [displayContent]);
 
   // =============================================================================
   // BUILD SLIDE DECK - Now separates content from ads
@@ -266,21 +251,39 @@ const SMDSimulatorPage: React.FC = () => {
       }
     });
     
-    // Add moderate/info announcements between routes
-    const activeAnnouncements = announcements.filter(
-      (a) => a.active && a.severity !== 'critical'
+    // Add announcements - show them even if there are no routes!
+    const nonEmergencyAnnouncements = announcements.filter(
+      (a) => a.severity !== 'emergency'
     );
     
-    // Interleave announcements
-    if (activeAnnouncements.length > 0 && newSlides.length > 0) {
-      const announcementSlide: Slide = {
-        type: 'announcement',
-        data: activeAnnouncements[0],
-        duration: ANNOUNCEMENT_SLIDE_DURATION,
-      };
-      // Insert after first route
-      if (newSlides.length >= 1) {
+    if (nonEmergencyAnnouncements.length > 0) {
+      if (newSlides.length > 0) {
+        // Interleave announcements between routes
+        const announcementSlide: Slide = {
+          type: 'announcement',
+          data: nonEmergencyAnnouncements[0],
+          duration: ANNOUNCEMENT_SLIDE_DURATION,
+        };
+        // Insert after first route
         newSlides.splice(1, 0, announcementSlide);
+        
+        // Add more announcements if we have them
+        for (let i = 1; i < nonEmergencyAnnouncements.length; i++) {
+          newSlides.push({
+            type: 'announcement',
+            data: nonEmergencyAnnouncements[i],
+            duration: ANNOUNCEMENT_SLIDE_DURATION,
+          });
+        }
+      } else {
+        // No routes - just show all announcements
+        nonEmergencyAnnouncements.forEach((announcement) => {
+          newSlides.push({
+            type: 'announcement',
+            data: announcement,
+            duration: ANNOUNCEMENT_SLIDE_DURATION,
+          });
+        });
       }
     }
     
@@ -291,38 +294,53 @@ const SMDSimulatorPage: React.FC = () => {
   // =============================================================================
   // Get current ad to display
   // =============================================================================
-  const getCurrentAd = useCallback((): DummyAd | null => {
-    if (DUMMY_ADS.length === 0) return null;
-    return DUMMY_ADS[currentAdIndex % DUMMY_ADS.length];
-  }, [currentAdIndex]);
+  const getCurrentAd = useCallback((): DisplayAdLocal | null => {
+    if (ads.length === 0) return null;
+    return ads[currentAdIndex % ads.length];
+  }, [currentAdIndex, ads]);
 
   // =============================================================================
   // Move to next slide (content or ad)
   // =============================================================================
   const moveToNextSlide = useCallback(() => {
     if (isShowingAd) {
-      // Currently showing an ad - check if we can show another
+      // Currently showing an ad - mark it as shown
       const currentAd = getCurrentAd();
       if (currentAd) {
+        // Track that this ad has been shown
+        setAdsShownThisCycle(prev => new Set(prev).add(currentAd.id));
+        
         // Deduct the ad duration from budget
         const newBudget = adBudgetRemaining - currentAd.duration_seconds;
         
         // Move to next ad in the independent ad cycle
-        const nextAdIndex = (currentAdIndex + 1) % DUMMY_ADS.length;
-        const nextAd = DUMMY_ADS[nextAdIndex];
+        const nextAdIndex = (currentAdIndex + 1) % ads.length;
+        const nextAd = ads[nextAdIndex];
         
-        // Check if next ad fits in remaining budget
-        if (newBudget > 0 && nextAd && nextAd.duration_seconds <= newBudget) {
+        // Check if all ads have been shown at least once this cycle
+        const updatedShownAds = new Set(adsShownThisCycle).add(currentAd.id);
+        const allAdsShown = ads.length > 0 && ads.every(ad => updatedShownAds.has(ad.id));
+        
+        // Conditions to continue showing ads:
+        // 1. Have budget remaining
+        // 2. Next ad fits in budget
+        // 3. NOT all ads have been shown (if all shown, we can end early)
+        const shouldContinueAds = newBudget > 0 && 
+          nextAd && 
+          nextAd.duration_seconds <= newBudget && 
+          !allAdsShown;
+        
+        if (shouldContinueAds) {
           // Show next ad
           setAdBudgetRemaining(newBudget);
           setCurrentAdIndex(nextAdIndex);
         } else {
-          // Budget exhausted or next ad too long - go back to content
-          // Save where we left off in ad cycle for next time
+          // End ad cycle - either budget exhausted, next ad too long, or all ads shown
           adStartIndexRef.current = nextAdIndex;
           setIsShowingAd(false);
           setCurrentContentIndex(0); // Start content from beginning
           setAdBudgetRemaining(AD_BUDGET_PER_CYCLE); // Reset budget for next cycle
+          setAdsShownThisCycle(new Set()); // Reset shown ads tracker
         }
       }
     } else {
@@ -331,12 +349,13 @@ const SMDSimulatorPage: React.FC = () => {
       
       if (nextContentIndex >= contentSlides.length) {
         // Finished all content slides - time for ads
-        if (DUMMY_ADS.length > 0 && adBudgetRemaining > 0) {
+        if (ads.length > 0 && adBudgetRemaining > 0) {
           // Check if the current ad fits the budget
-          const currentAd = DUMMY_ADS[adStartIndexRef.current % DUMMY_ADS.length];
+          const currentAd = ads[adStartIndexRef.current % ads.length];
           if (currentAd && currentAd.duration_seconds <= adBudgetRemaining) {
             setIsShowingAd(true);
             setCurrentAdIndex(adStartIndexRef.current);
+            setAdsShownThisCycle(new Set()); // Start fresh tracking for this ad cycle
           } else {
             // No ad fits - restart content cycle
             setCurrentContentIndex(0);
@@ -353,7 +372,7 @@ const SMDSimulatorPage: React.FC = () => {
       }
     }
     setSlideProgress(0);
-  }, [isShowingAd, currentAdIndex, adBudgetRemaining, currentContentIndex, contentSlides.length, getCurrentAd]);
+  }, [isShowingAd, currentAdIndex, adBudgetRemaining, currentContentIndex, contentSlides.length, getCurrentAd, ads, adsShownThisCycle]);
 
   // =============================================================================
   // EFFECTS
@@ -367,7 +386,8 @@ const SMDSimulatorPage: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Simulate ETA countdown every minute
+  // ETA countdown between API refreshes (local simulation)
+  // The API refreshes every 30 seconds, this provides smooth countdown in between
   useEffect(() => {
     const interval = setInterval(() => {
       setRoutes((prevRoutes) =>
@@ -377,7 +397,7 @@ const SMDSimulatorPage: React.FC = () => {
             .map((bus) => ({
               ...bus,
               eta_minutes: Math.max(0, bus.eta_minutes - 1),
-              status: bus.eta_minutes <= 2 ? 'approaching' : bus.status,
+              status: bus.eta_minutes <= 2 ? 'arriving' as const : bus.eta_minutes <= 4 ? 'approaching' as const : bus.status,
             }))
             .filter((bus) => bus.eta_minutes > 0), // Remove arrived buses
         }))
@@ -391,21 +411,21 @@ const SMDSimulatorPage: React.FC = () => {
     buildContentSlides();
   }, [buildContentSlides]);
 
-  // Check for critical announcements
+  // Check for emergency announcements
   useEffect(() => {
-    const critical = announcements.find((a) => a.severity === 'critical' && a.active);
-    if (critical) {
-      // Save current state before showing critical
+    const emergency = announcements.find((a) => a.severity === 'emergency');
+    if (emergency) {
+      // Save current state before showing emergency
       pausedStateRef.current = {
         contentIndex: currentContentIndex,
         wasShowingAd: isShowingAd,
         adIndex: currentAdIndex,
       };
-      setCriticalAnnouncement(critical);
+      setCriticalAnnouncement(emergency);
       setShowCritical(true);
     } else {
       if (showCritical) {
-        // Restore state after critical clears
+        // Restore state after emergency clears
         setCurrentContentIndex(pausedStateRef.current.contentIndex);
         setIsShowingAd(pausedStateRef.current.wasShowingAd);
         setCurrentAdIndex(pausedStateRef.current.adIndex);
@@ -417,7 +437,7 @@ const SMDSimulatorPage: React.FC = () => {
 
   // Slide progression timer
   useEffect(() => {
-    if (isPaused || showCritical) return;
+    if (isPaused || showCritical || isLoading) return;
     
     // Get current slide duration
     let currentDuration = ROUTE_SLIDE_DURATION;
@@ -441,7 +461,7 @@ const SMDSimulatorPage: React.FC = () => {
     }, 100);
 
     return () => clearInterval(progressInterval);
-  }, [isPaused, showCritical, isShowingAd, currentContentIndex, contentSlides, getCurrentAd, moveToNextSlide]);
+  }, [isPaused, showCritical, isLoading, isShowingAd, currentContentIndex, contentSlides, getCurrentAd, moveToNextSlide]);
 
   // Fullscreen handling
   useEffect(() => {
@@ -461,22 +481,10 @@ const SMDSimulatorPage: React.FC = () => {
   };
 
   // =============================================================================
-  // TOGGLE CRITICAL (for demo purposes)
-  // =============================================================================
-  
-  const toggleCriticalAnnouncement = () => {
-    setAnnouncements((prev) =>
-      prev.map((a) =>
-        a.severity === 'critical' ? { ...a, active: !a.active } : a
-      )
-    );
-  };
-
-  // =============================================================================
   // RENDER HELPERS
   // =============================================================================
 
-  const renderRouteSlide = (route: DummyRoute) => (
+  const renderRouteSlide = (route: DisplayRoute) => (
     <motion.div
       key={`route-${route.route_code}`}
       initial={{ opacity: 0, x: 100 }}
@@ -511,10 +519,8 @@ const SMDSimulatorPage: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.1 }}
               className={`flex items-center justify-between p-6 rounded-2xl border-2 ${
-                bus.status === 'approaching'
+                bus.status === 'arriving' || bus.status === 'approaching'
                   ? 'bg-green-500/20 border-green-500'
-                  : bus.status === 'delayed'
-                  ? 'bg-orange-500/10 border-orange-500/50'
                   : 'bg-white/5 border-white/10'
               }`}
             >
@@ -534,24 +540,24 @@ const SMDSimulatorPage: React.FC = () => {
                 {/* Status Badge */}
                 <div
                   className={`px-4 py-2 rounded-xl text-lg font-semibold ${
-                    bus.status === 'approaching'
+                    bus.status === 'arriving'
                       ? 'bg-green-500 text-white animate-pulse'
-                      : bus.status === 'delayed'
-                      ? 'bg-orange-500 text-white'
+                      : bus.status === 'approaching'
+                      ? 'bg-yellow-500 text-white'
                       : 'bg-white/20 text-white'
                   }`}
                 >
-                  {bus.status === 'approaching'
+                  {bus.status === 'arriving'
                     ? language === 'en'
-                      ? '🚌 ARRIVING'
-                      : '🚌 آ رہی ہے'
-                    : bus.status === 'delayed'
+                      ? '🚌 ARRIVING NOW'
+                      : '🚌 ابھی آ رہی ہے'
+                    : bus.status === 'approaching'
                     ? language === 'en'
-                      ? '⏰ DELAYED'
-                      : '⏰ تاخیر'
+                      ? '🚌 APPROACHING'
+                      : '🚌 قریب آ رہی ہے'
                     : language === 'en'
-                    ? '✓ ON TIME'
-                    : '✓ وقت پر'}
+                    ? '→ ON ROUTE'
+                    : '→ راستے میں'}
                 </div>
 
                 {/* ETA */}
@@ -587,7 +593,7 @@ const SMDSimulatorPage: React.FC = () => {
     </motion.div>
   );
 
-  const renderAnnouncementSlide = (announcement: DummyAnnouncement) => (
+  const renderAnnouncementSlide = (announcement: DisplayAnnouncementLocal) => (
     <motion.div
       key={`announcement-${announcement.id}`}
       initial={{ opacity: 0, scale: 0.95 }}
@@ -598,24 +604,24 @@ const SMDSimulatorPage: React.FC = () => {
     >
       <div
         className={`max-w-4xl p-12 rounded-3xl text-center ${
-          announcement.severity === 'moderate'
+          announcement.severity === 'warning'
             ? 'bg-amber-500/20 border-4 border-amber-500'
             : 'bg-blue-500/20 border-4 border-blue-500'
         }`}
       >
         <div
           className={`h-24 w-24 mx-auto mb-6 rounded-full flex items-center justify-center ${
-            announcement.severity === 'moderate' ? 'bg-amber-500' : 'bg-blue-500'
+            announcement.severity === 'warning' ? 'bg-amber-500' : 'bg-blue-500'
           }`}
         >
           <AlertTriangle className="h-12 w-12 text-white" />
         </div>
         <h2
           className={`text-4xl font-bold mb-4 ${
-            announcement.severity === 'moderate' ? 'text-amber-400' : 'text-blue-400'
+            announcement.severity === 'warning' ? 'text-amber-400' : 'text-blue-400'
           }`}
         >
-          {announcement.severity === 'moderate'
+          {announcement.severity === 'warning'
             ? language === 'en'
               ? 'NOTICE'
               : 'نوٹس'
@@ -630,7 +636,7 @@ const SMDSimulatorPage: React.FC = () => {
     </motion.div>
   );
 
-  const renderAdSlide = (ad: DummyAd) => {
+  const renderAdSlide = (ad: DisplayAdLocal) => {
     const renderAdContent = () => {
       if (ad.media_type === 'youtube') {
         const videoId = getYouTubeVideoId(ad.content_url);
@@ -729,7 +735,7 @@ const SMDSimulatorPage: React.FC = () => {
   );
 
   // Get current slide info for display
-  const getCurrentSlideInfo = (): { type: string; data: DummyRoute | DummyAnnouncement | DummyAd | null; duration: number } => {
+  const getCurrentSlideInfo = (): { type: string; data: DisplayRoute | DisplayAnnouncementLocal | DisplayAdLocal | null; duration: number } => {
     if (isShowingAd) {
       const ad = getCurrentAd();
       return { type: 'ad', data: ad, duration: ad ? Math.min(ad.duration_seconds, MAX_AD_DURATION) : 10 };
@@ -832,13 +838,30 @@ const SMDSimulatorPage: React.FC = () => {
 
               {/* Critical Announcement Toggle */}
               <Button
-                variant={announcements.find((a) => a.severity === 'critical')?.active ? 'destructive' : 'outline'}
+                variant={showCritical ? 'destructive' : 'outline'}
                 size="sm"
-                onClick={toggleCriticalAnnouncement}
+                onClick={() => {
+                  if (showCritical) {
+                    setShowCritical(false);
+                    setCriticalAnnouncement(null);
+                  } else {
+                    // Manual trigger for testing
+                    const testEmergency: DisplayAnnouncementLocal = {
+                      id: 0,
+                      title: 'Test Emergency',
+                      message: 'This is a test emergency announcement',
+                      message_ur: 'یہ ایک ٹیسٹ ایمرجنسی اعلان ہے',
+                      severity: 'emergency',
+                      active: true,
+                    };
+                    setCriticalAnnouncement(testEmergency);
+                    setShowCritical(true);
+                  }
+                }}
                 className="gap-2"
               >
                 <AlertTriangle className="h-4 w-4" />
-                {announcements.find((a) => a.severity === 'critical')?.active
+                {showCritical
                   ? 'Clear Emergency'
                   : 'Trigger Emergency'}
               </Button>
@@ -855,12 +878,12 @@ const SMDSimulatorPage: React.FC = () => {
           <div className="mt-4 pt-4 border-t">
             <div className="flex items-center gap-4 text-sm text-gray-600">
               <span>
-                {isShowingAd ? 'Ad' : 'Content'} {isShowingAd ? currentAdIndex + 1 : currentContentIndex + 1} of {isShowingAd ? DUMMY_ADS.length : contentSlides.length}
+                {isShowingAd ? 'Ad' : 'Content'} {isShowingAd ? currentAdIndex + 1 : currentContentIndex + 1} of {isShowingAd ? ads.length : contentSlides.length}
               </span>
               <span>•</span>
               <span className="capitalize">
                 {currentSlideInfo.type || 'Loading'}
-                {currentSlideInfo.type === 'route' && currentSlideInfo.data && ` - ${(currentSlideInfo.data as DummyRoute).route_code}`}
+                {currentSlideInfo.type === 'route' && currentSlideInfo.data && ` - ${(currentSlideInfo.data as DisplayRoute).route_code}`}
               </span>
               <span>•</span>
               <span>{currentSlideInfo.duration}s duration</span>
@@ -903,7 +926,11 @@ const SMDSimulatorPage: React.FC = () => {
                 {language === 'en' ? 'Smart Metro Bus' : 'سمارٹ میٹرو بس'}
               </h1>
               <p className="text-gray-400 text-sm">
-                {language === 'en' ? 'Islamabad • F-10 Markaz Stop' : 'اسلام آباد • ایف-10 مرکز اسٹاپ'}
+                {displayContent?.stop?.name 
+                  ? (language === 'en' 
+                      ? `Islamabad • ${displayContent.stop.name}` 
+                      : `اسلام آباد • ${displayContent.stop.name}`)
+                  : (language === 'en' ? 'Loading stop info...' : 'اسٹاپ کی معلومات لوڈ ہو رہی ہیں...')}
               </p>
             </div>
           </div>
@@ -977,17 +1004,36 @@ const SMDSimulatorPage: React.FC = () => {
           <AnimatePresence mode="wait">
             {showCritical && criticalAnnouncement ? (
               renderCriticalAnnouncement()
+            ) : isLoading ? (
+              <div className="flex flex-col items-center justify-center h-full">
+                <Bus className="h-16 w-16 text-teal-500 animate-bounce mb-4" />
+                <p className="text-gray-500 text-2xl">Loading display content...</p>
+              </div>
+            ) : isError ? (
+              <div className="flex flex-col items-center justify-center h-full">
+                <AlertTriangle className="h-16 w-16 text-red-500 mb-4" />
+                <p className="text-red-400 text-2xl">Failed to load display content</p>
+                <p className="text-gray-500 text-lg mt-2">Please check your connection</p>
+              </div>
+            ) : !numericDisplayId ? (
+              <div className="flex flex-col items-center justify-center h-full">
+                <Settings className="h-16 w-16 text-amber-500 mb-4" />
+                <p className="text-amber-400 text-2xl">No Display Selected</p>
+                <p className="text-gray-500 text-lg mt-2">Select a display from the Displays page</p>
+              </div>
             ) : currentSlideInfo.data ? (
               currentSlideInfo.type === 'route' ? (
-                renderRouteSlide(currentSlideInfo.data as DummyRoute)
+                renderRouteSlide(currentSlideInfo.data as DisplayRoute)
               ) : currentSlideInfo.type === 'announcement' ? (
-                renderAnnouncementSlide(currentSlideInfo.data as DummyAnnouncement)
+                renderAnnouncementSlide(currentSlideInfo.data as DisplayAnnouncementLocal)
               ) : currentSlideInfo.type === 'ad' ? (
-                renderAdSlide(currentSlideInfo.data as DummyAd)
+                renderAdSlide(currentSlideInfo.data as DisplayAdLocal)
               ) : null
             ) : (
-              <div className="flex items-center justify-center h-full">
-                <p className="text-gray-500 text-2xl">Loading display...</p>
+              <div className="flex flex-col items-center justify-center h-full">
+                <Bus className="h-16 w-16 text-gray-600 mb-4" />
+                <p className="text-gray-500 text-2xl">No content available</p>
+                <p className="text-gray-600 text-lg mt-2">Waiting for bus data...</p>
               </div>
             )}
           </AnimatePresence>
@@ -1004,7 +1050,7 @@ const SMDSimulatorPage: React.FC = () => {
         )}
 
         {/* Slide indicators - shows content slides + ad indicator */}
-        {!showCritical && (contentSlides.length > 0 || DUMMY_ADS.length > 0) && (
+        {!showCritical && (contentSlides.length > 0 || ads.length > 0) && (
           <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center gap-2">
             {/* Content slide indicators */}
             {contentSlides.map((_, idx: number) => (
@@ -1018,7 +1064,7 @@ const SMDSimulatorPage: React.FC = () => {
               />
             ))}
             {/* Ad cycle indicator (single dot for all ads) */}
-            {DUMMY_ADS.length > 0 && (
+            {ads.length > 0 && (
               <div
                 className={`h-2 rounded-full transition-all duration-300 ${
                   isShowingAd

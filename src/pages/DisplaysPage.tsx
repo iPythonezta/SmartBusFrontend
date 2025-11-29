@@ -5,11 +5,11 @@ import { useNavigate } from 'react-router-dom';
 import { displaysApi } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Monitor, Plus, MapPin, Activity, Power, PowerOff, Pencil, Trash2 } from 'lucide-react';
+import { Monitor, Plus, MapPin, Activity, Power, PowerOff, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useToast } from '@/components/ui/use-toast';
 import DisplayModal from '@/components/modals/DisplayModal';
-import type { DisplayUnit } from '@/types';
+import type { DisplayUnit, CreateDisplayInput } from '@/types';
 
 const DisplaysPage: React.FC = () => {
   const { t } = useTranslation();
@@ -20,7 +20,7 @@ const DisplaysPage: React.FC = () => {
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDisplay, setEditingDisplay] = useState<DisplayUnit | null>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   
   const { data: displays, isLoading } = useQuery({
     queryKey: ['displays'],
@@ -29,7 +29,7 @@ const DisplaysPage: React.FC = () => {
 
   // Create mutation
   const createMutation = useMutation({
-    mutationFn: (data: { name: string; stop_id: string; location?: string; status: 'online' | 'offline' }) =>
+    mutationFn: (data: CreateDisplayInput) =>
       displaysApi.createDisplay(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['displays'] });
@@ -50,7 +50,7 @@ const DisplaysPage: React.FC = () => {
 
   // Update mutation
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<DisplayUnit> }) =>
+    mutationFn: ({ id, data }: { id: number; data: Partial<DisplayUnit> }) =>
       displaysApi.updateDisplay(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['displays'] });
@@ -72,7 +72,7 @@ const DisplaysPage: React.FC = () => {
 
   // Delete mutation
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => displaysApi.deleteDisplay(id),
+    mutationFn: (id: number) => displaysApi.deleteDisplay(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['displays'] });
       setDeleteConfirmId(null);
@@ -91,7 +91,8 @@ const DisplaysPage: React.FC = () => {
   });
 
   const onlineCount = displays?.filter(d => d.status === 'online').length || 0;
-  const offlineCount = (displays?.length || 0) - onlineCount;
+  const offlineCount = displays?.filter(d => d.status === 'offline').length || 0;
+  const errorCount = displays?.filter(d => d.status === 'error').length || 0;
 
   const handleAddClick = () => {
     setEditingDisplay(null);
@@ -103,7 +104,7 @@ const DisplaysPage: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleDeleteClick = (id: string) => {
+  const handleDeleteClick = (id: number) => {
     setDeleteConfirmId(id);
   };
 
@@ -113,11 +114,19 @@ const DisplaysPage: React.FC = () => {
     }
   };
 
-  const handleModalSubmit = (data: { name: string; stop_id: string; location?: string; status: 'online' | 'offline' }) => {
+  const handleModalSubmit = (data: { name: string; stop_id: string; location?: string; status: 'online' | 'offline' | 'error' }) => {
+    // Convert stop_id from string to number
+    const submitData: CreateDisplayInput = {
+      name: data.name,
+      stop_id: parseInt(data.stop_id, 10),
+      location: data.location,
+      status: data.status,
+    };
+    
     if (editingDisplay) {
-      updateMutation.mutate({ id: editingDisplay.id, data });
+      updateMutation.mutate({ id: editingDisplay.id, data: submitData });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(submitData);
     }
   };
 
@@ -160,7 +169,7 @@ const DisplaysPage: React.FC = () => {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
@@ -194,10 +203,24 @@ const DisplaysPage: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Offline</p>
-                <p className="text-2xl font-bold text-red-600">{offlineCount}</p>
+                <p className="text-2xl font-bold text-gray-600">{offlineCount}</p>
+              </div>
+              <div className="h-12 w-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                <PowerOff className="h-6 w-6 text-gray-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Error</p>
+                <p className="text-2xl font-bold text-red-600">{errorCount}</p>
               </div>
               <div className="h-12 w-12 bg-red-100 rounded-lg flex items-center justify-center">
-                <PowerOff className="h-6 w-6 text-red-600" />
+                <AlertTriangle className="h-6 w-6 text-red-600" />
               </div>
             </div>
           </CardContent>
@@ -223,9 +246,16 @@ const DisplaysPage: React.FC = () => {
                     <div>
                       <CardTitle className="text-lg">{display.name}</CardTitle>
                       <div className="flex items-center gap-2 mt-1">
-                        <div className={`h-2 w-2 rounded-full ${display.status === 'online' ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
-                        <span className={`text-xs font-medium ${display.status === 'online' ? 'text-green-600' : 'text-gray-500'}`}>
-                          {display.status === 'online' ? 'Online' : 'Offline'}
+                        <div className={`h-2 w-2 rounded-full ${
+                          display.status === 'online' ? 'bg-green-500 animate-pulse' : 
+                          display.status === 'error' ? 'bg-red-500' : 'bg-gray-400'
+                        }`}></div>
+                        <span className={`text-xs font-medium ${
+                          display.status === 'online' ? 'text-green-600' : 
+                          display.status === 'error' ? 'text-red-600' : 'text-gray-500'
+                        }`}>
+                          {display.status === 'online' ? 'Online' : 
+                           display.status === 'error' ? 'Error' : 'Offline'}
                         </span>
                       </div>
                     </div>

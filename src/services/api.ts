@@ -1,5 +1,4 @@
-// API Services - Uses real API for auth/users/buses/dashboard/stops/routes, mock for other features
-import { mockApi } from './mockApi';
+// API Services - Uses real API for all features
 import { apiClient } from '@/lib/api-client';
 import type {
   AuthResponse,
@@ -22,6 +21,10 @@ import type {
   EndTripResponse,
   DisplayUnit,
   CreateDisplayInput,
+  DisplayContent,
+  HeartbeatResponse,
+  StopETAResponse,
+  RouteETAResponse,
   Advertisement,
   CreateAdInput,
   AdSchedule,
@@ -29,7 +32,6 @@ import type {
   Announcement,
   CreateAnnouncementInput,
   DashboardStats,
-  ListQueryParams,
 } from '@/types';
 
 // Auth API - Real API
@@ -67,6 +69,13 @@ export const stopsApi = {
   updateStop: (id: number, data: Partial<CreateStopInput>) =>
     apiClient.patch<Stop>(`/stops/${id}/`, data),
   deleteStop: (id: number) => apiClient.delete<void>(`/stops/${id}/`),
+  // ETA endpoint
+  getETAs: async (stopId: number, params?: { route_id?: number }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.route_id) searchParams.append('route_id', params.route_id.toString());
+    const queryString = searchParams.toString();
+    return apiClient.get<StopETAResponse>(`/stops/${stopId}/etas/${queryString ? `?${queryString}` : ''}`);
+  },
 };
 
 // Routes API - Real API
@@ -92,6 +101,9 @@ export const routesApi = {
       `/routes/${routeId}/stops/reorder/`,
       { route_stop_ids: routeStopIds }
     ),
+  // ETA endpoint
+  getETAs: (routeId: number) => 
+    apiClient.get<RouteETAResponse>(`/routes/${routeId}/etas/`),
 };
 
 // Buses API - Real API
@@ -124,15 +136,25 @@ export const busesApi = {
   getActiveBuses: () => apiClient.get<ActiveBus[]>('/buses/active/'),
 };
 
-// Display Units API (Mock - to be implemented)
+// Display Units API - Real API
 export const displaysApi = {
-  getDisplays: (_params?: ListQueryParams) => mockApi.getDisplays(),
-  getDisplay: (id: string) => mockApi.getDisplay(id),
-  createDisplay: (data: CreateDisplayInput & { status: 'online' | 'offline' }) => mockApi.createDisplay(data),
-  updateDisplay: (id: string, data: Partial<DisplayUnit>) => mockApi.updateDisplay(id, data),
-  deleteDisplay: (id: string) => mockApi.deleteDisplay(id),
-  getDisplaySimulation: (id: string) => mockApi.getDisplaySimulation(id),
-  getDisplayContent: (_id: string) => Promise.resolve({ ads: [], announcements: [] }),
+  getDisplays: async (params?: { search?: string; status?: string; stop_id?: number }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.search) searchParams.append('search', params.search);
+    if (params?.status) searchParams.append('status', params.status);
+    if (params?.stop_id) searchParams.append('stop_id', params.stop_id.toString());
+    const queryString = searchParams.toString();
+    return apiClient.get<DisplayUnit[]>(`/displays/${queryString ? `?${queryString}` : ''}`);
+  },
+  getDisplay: (id: number) => apiClient.get<DisplayUnit>(`/displays/${id}/`),
+  createDisplay: (data: CreateDisplayInput) => apiClient.post<DisplayUnit>('/displays/', data),
+  updateDisplay: (id: number, data: Partial<DisplayUnit>) => 
+    apiClient.patch<DisplayUnit>(`/displays/${id}/`, data),
+  deleteDisplay: (id: number) => apiClient.delete<void>(`/displays/${id}/`),
+  sendHeartbeat: (id: number, status: 'online' | 'offline' | 'error') => 
+    apiClient.post<HeartbeatResponse>(`/displays/${id}/heartbeat/`, { status }),
+  getDisplayContent: (id: number) => 
+    apiClient.get<DisplayContent>(`/displays/${id}/content/`),
 };
 
 // Advertisements API - Real API
@@ -189,6 +211,5 @@ export const announcementsApi = {
 // Dashboard API - Real API
 export const dashboardApi = {
   getStats: () => apiClient.get<DashboardStats>('/dashboard/stats/'),
-  getRecentActivity: (_params?: ListQueryParams) =>
-    Promise.resolve([]),
+  getRecentActivity: () => Promise.resolve([]),
 };

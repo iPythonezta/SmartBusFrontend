@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { busesApi, routesApi } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -119,7 +119,7 @@ interface BusSimulationState {
   currentPathIndex: number; // current index in pathPoints array
 }
 
-const GPSSimulatorPage: React.FC = () => {
+const GPSSimulatorPage = () => {
   const { toast } = useToast();
   
   // Simulation state - use ref to avoid stale closure issues
@@ -594,11 +594,12 @@ const GPSSimulatorPage: React.FC = () => {
       return;
     }
 
-    const activeBuses = buses.filter(b => b.status === 'active');
-    if (activeBuses.length === 0) {
+    // Get buses that can be simulated (active or inactive, not maintenance)
+    const simulatable = buses.filter(b => b.status === 'active' || b.status === 'inactive');
+    if (simulatable.length === 0) {
       toast({
-        title: 'No Active Buses',
-        description: 'Mark at least one bus as active to simulate.',
+        title: 'No Simulatable Buses',
+        description: 'Add buses with active or inactive status to simulate.',
         variant: 'destructive',
       });
       return;
@@ -607,7 +608,7 @@ const GPSSimulatorPage: React.FC = () => {
     setGlobalSimulating(true);
     
     // Start simulations sequentially
-    for (const bus of activeBuses) {
+    for (const bus of simulatable) {
       if (!busSimulations.has(bus.id)) {
         await startBusSimulation(bus);
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -616,7 +617,7 @@ const GPSSimulatorPage: React.FC = () => {
 
     toast({
       title: 'All Simulations Started',
-      description: `Started simulation for ${activeBuses.length} active buses`,
+      description: `Started simulation for ${simulatable.length} buses`,
     });
   }, [buses, busSimulations, startBusSimulation, toast]);
 
@@ -704,9 +705,10 @@ const GPSSimulatorPage: React.FC = () => {
     );
   }
 
-  const activeBuses = buses?.filter(b => b.status === 'active') || [];
-  const busesWithRoute = activeBuses.filter(b => busHasRoute(b));
-  const busesWithoutRoute = activeBuses.filter(b => !busHasRoute(b));
+  // Show active and inactive buses (not maintenance)
+  const simulatableBuses = buses?.filter(b => b.status === 'active' || b.status === 'inactive') || [];
+  const busesWithRoute = simulatableBuses.filter(b => busHasRoute(b));
+  const busesWithoutRoute = simulatableBuses.filter(b => !busHasRoute(b));
 
   return (
     <div className="space-y-6">
@@ -761,8 +763,8 @@ const GPSSimulatorPage: React.FC = () => {
             </div>
             <div className="flex items-end">
               <div className="text-sm">
-                <span className="font-bold text-lg">{activeBuses.length}</span>
-                <span className="text-muted-foreground ml-1">active buses</span>
+                <span className="font-bold text-lg">{simulatableBuses.length}</span>
+                <span className="text-muted-foreground ml-1">simulatable buses</span>
               </div>
             </div>
             <div className="flex items-end gap-2">
@@ -778,7 +780,7 @@ const GPSSimulatorPage: React.FC = () => {
               ) : (
                 <Button 
                   onClick={startAllSimulation}
-                  disabled={activeBuses.length === 0}
+                  disabled={simulatableBuses.length === 0}
                   className="gap-2 flex-1 bg-amber-500 hover:bg-amber-600"
                 >
                   <Play className="h-4 w-4" />
@@ -958,14 +960,14 @@ const GPSSimulatorPage: React.FC = () => {
       )}
 
       {/* Empty State */}
-      {activeBuses.length === 0 && (
+      {simulatableBuses.length === 0 && (
         <Card>
           <CardContent className="py-12">
             <div className="text-center text-muted-foreground">
               <Bus className="h-16 w-16 mx-auto mb-4 opacity-50" />
-              <p className="text-lg font-medium">No Active Buses</p>
+              <p className="text-lg font-medium">No Simulatable Buses</p>
               <p className="text-sm mt-2">
-                Mark buses as "active" in the Buses page to simulate their GPS.
+                Add buses with "active" or "inactive" status to simulate GPS. Buses in "maintenance" cannot be simulated.
               </p>
             </div>
           </CardContent>
