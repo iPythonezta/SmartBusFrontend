@@ -94,17 +94,14 @@ export const displaysApi = {
 // Advertisements API
 export const adsApi = {
   getAds: (params?: ListQueryParams) => mockApi.getAds(),
-  getAd: (id: string) => Promise.resolve(mockApi.getAds().then(ads => ads[0])),
+  getAd: (id: string) => Promise.resolve(mockApi.getAds().then(ads => ads.find(a => a.id === id) || ads[0])),
   createAd: (data: CreateAdInput) => mockApi.createAd(data),
-  updateAd: (id: string, data: Partial<Advertisement>) =>
-    Promise.resolve({ id, ...data } as Advertisement),
-  deleteAd: (id: string) => Promise.resolve(),
+  updateAd: (id: string, data: Partial<Advertisement>) => mockApi.updateAd(id, data),
+  deleteAd: (id: string) => mockApi.deleteAd(id),
   getSchedules: (params?: ListQueryParams) => mockApi.getSchedules(),
-  createSchedule: (data: CreateAdScheduleInput) =>
-    Promise.resolve({ id: '3', ...data, created_at: new Date().toISOString() } as AdSchedule),
-  updateSchedule: (id: string, data: Partial<AdSchedule>) =>
-    Promise.resolve({ id, ...data } as AdSchedule),
-  deleteSchedule: (id: string) => Promise.resolve(),
+  createSchedule: (data: CreateAdScheduleInput) => mockApi.createSchedule(data),
+  updateSchedule: (id: string, data: Partial<AdSchedule>) => mockApi.updateSchedule(id, data),
+  deleteSchedule: (id: string) => mockApi.deleteSchedule(id),
 };
 
 // Announcements API

@@ -135,8 +135,10 @@ export interface Advertisement {
   id: string;
   title: string;
   content_url: string;
-  media_type: 'image' | 'video';
+  media_type: 'image' | 'youtube';
   duration_seconds: number;
+  advertiser_name: string;
+  advertiser_contact?: string;
   metadata?: Record<string, any>;
   created_at: string;
   updated_at: string;
@@ -146,6 +148,7 @@ export interface AdSchedule {
   id: string;
   ad_id: string;
   display_id: string;
+  display_name?: string;
   start_time: string;
   end_time: string;
   priority: number;
@@ -161,14 +164,16 @@ export interface AdContent {
 export interface CreateAdInput {
   title: string;
   content_url: string;
-  media_type: 'image' | 'video';
+  media_type: 'image' | 'youtube';
   duration_seconds: number;
+  advertiser_name: string;
+  advertiser_contact?: string;
   metadata?: Record<string, any>;
 }
 
 export interface CreateAdScheduleInput {
   ad_id: string;
-  display_id: string;
+  display_ids: string[]; // Changed to array for multi-select
   start_time: string;
   end_time: string;
   priority: number;

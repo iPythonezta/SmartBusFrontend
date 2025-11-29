@@ -1,14 +1,42 @@
-﻿import React from 'react';
+﻿import React, { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adsApi } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, Image, Calendar, CheckCircle, Clock, Star } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Plus, Image, Calendar, CheckCircle, Clock, Star, Pencil, Trash2, Youtube, Search, Building2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useToast } from '@/components/ui/use-toast';
+import AdModal from '@/components/modals/AdModal';
+import AdScheduleModal from '@/components/modals/AdScheduleModal';
+import type { Advertisement, AdSchedule, CreateAdInput, CreateAdScheduleInput } from '@/types';
+
+// Helper to get YouTube thumbnail
+const getYouTubeThumbnail = (url: string): string | null => {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return `https://img.youtube.com/vi/${match[1]}/mqdefault.jpg`;
+  }
+  return null;
+};
 
 const AdsPage: React.FC = () => {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  // Modal state
+  const [isAdModalOpen, setIsAdModalOpen] = useState(false);
+  const [editingAd, setEditingAd] = useState<Advertisement | null>(null);
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState<AdSchedule | null>(null);
+  const [schedulingAdId, setSchedulingAdId] = useState<string | undefined>(undefined);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   
   const { data: ads, isLoading: adsLoading } = useQuery({
     queryKey: ['ads'],
@@ -20,11 +48,124 @@ const AdsPage: React.FC = () => {
     queryFn: () => adsApi.getSchedules(),
   });
 
+  // Filter ads by search query
+  const filteredAds = useMemo(() => {
+    if (!ads) return [];
+    if (!searchQuery.trim()) return ads;
+    
+    const query = searchQuery.toLowerCase();
+    return ads.filter(ad => 
+      ad.title.toLowerCase().includes(query) ||
+      ad.advertiser_name?.toLowerCase().includes(query) ||
+      ad.media_type.toLowerCase().includes(query)
+    );
+  }, [ads, searchQuery]);
+
+  // Ad mutations
+  const createAdMutation = useMutation({
+    mutationFn: (data: CreateAdInput) => adsApi.createAd(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ads'] });
+      setIsAdModalOpen(false);
+      toast({ title: 'Ad Created', description: 'Advertisement has been added successfully.' });
+    },
+    onError: () => {
+      toast({ title: 'Error', description: 'Failed to create advertisement.', variant: 'destructive' });
+    },
+  });
+
+  const updateAdMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<Advertisement> }) => adsApi.updateAd(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ads'] });
+      queryClient.invalidateQueries({ queryKey: ['ad-schedules'] });
+      setIsAdModalOpen(false);
+      setEditingAd(null);
+      toast({ title: 'Ad Updated', description: 'Advertisement has been updated successfully.' });
+    },
+    onError: () => {
+      toast({ title: 'Error', description: 'Failed to update advertisement.', variant: 'destructive' });
+    },
+  });
+
+  const deleteAdMutation = useMutation({
+    mutationFn: (id: string) => adsApi.deleteAd(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ads'] });
+      queryClient.invalidateQueries({ queryKey: ['ad-schedules'] });
+      setDeleteConfirmId(null);
+      toast({ title: 'Ad Deleted', description: 'Advertisement has been removed.' });
+    },
+    onError: () => {
+      toast({ title: 'Error', description: 'Failed to delete advertisement.', variant: 'destructive' });
+    },
+  });
+
+  // Schedule mutations
+  const createScheduleMutation = useMutation({
+    mutationFn: (data: CreateAdScheduleInput) => adsApi.createSchedule(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ad-schedules'] });
+      setIsScheduleModalOpen(false);
+      setSchedulingAdId(undefined);
+      toast({ title: 'Schedule Created', description: 'Ad schedule has been created successfully.' });
+    },
+    onError: () => {
+      toast({ title: 'Error', description: 'Failed to create schedule.', variant: 'destructive' });
+    },
+  });
+
+  const updateScheduleMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<AdSchedule> }) => adsApi.updateSchedule(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ad-schedules'] });
+      setIsScheduleModalOpen(false);
+      setEditingSchedule(null);
+      toast({ title: 'Schedule Updated', description: 'Ad schedule has been updated successfully.' });
+    },
+    onError: () => {
+      toast({ title: 'Error', description: 'Failed to update schedule.', variant: 'destructive' });
+    },
+  });
+
   const isLoading = adsLoading || schedulesLoading;
 
   const isScheduleActive = (startTime: string, endTime: string) => {
     const now = new Date();
     return now >= new Date(startTime) && now <= new Date(endTime);
+  };
+
+  // Handlers
+  const handleAddAd = () => {
+    setEditingAd(null);
+    setIsAdModalOpen(true);
+  };
+
+  const handleEditAd = (ad: Advertisement) => {
+    setEditingAd(ad);
+    setIsAdModalOpen(true);
+  };
+
+  const handleScheduleAd = (adId: string) => {
+    setEditingSchedule(null);
+    setSchedulingAdId(adId);
+    setIsScheduleModalOpen(true);
+  };
+
+  const handleAdModalSubmit = (data: CreateAdInput) => {
+    if (editingAd) {
+      updateAdMutation.mutate({ id: editingAd.id, data });
+    } else {
+      createAdMutation.mutate(data);
+    }
+  };
+
+  const handleScheduleModalSubmit = (data: CreateAdScheduleInput) => {
+    if (editingSchedule) {
+      updateScheduleMutation.mutate({ id: editingSchedule.id, data });
+    } else {
+      createScheduleMutation.mutate(data);
+    }
   };
 
   if (isLoading) {
@@ -59,10 +200,21 @@ const AdsPage: React.FC = () => {
           <h1 className="text-3xl font-bold">{t('ads.title')}</h1>
           <p className="text-muted-foreground mt-1">Manage advertisements and promotions</p>
         </div>
-        <Button className="gap-2">
-          <Plus className="h-4 w-4" />
-          {t('ads.uploadAd')}
-        </Button>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search ads..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 w-64"
+            />
+          </div>
+          <Button className="gap-2" onClick={handleAddAd}>
+            <Plus className="h-4 w-4" />
+            Upload Ad
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -112,9 +264,11 @@ const AdsPage: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {ads?.map((ad, index) => {
+        {filteredAds?.map((ad, index) => {
           const adSchedules = schedules?.filter(s => s.ad_id === ad.id) || [];
           const activeSchedule = adSchedules.find(s => isScheduleActive(s.start_time, s.end_time));
+          const isYouTube = ad.media_type === 'youtube';
+          const thumbnail = isYouTube ? getYouTubeThumbnail(ad.content_url) : ad.content_url;
           
           return (
             <motion.div
@@ -135,15 +289,29 @@ const AdsPage: React.FC = () => {
                     )}
                   </div>
                   <div className="flex items-center gap-1 mt-1">
-                    <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded">
+                    <span className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${
+                      isYouTube ? 'bg-red-100 text-red-700' : 'bg-purple-100 text-purple-700'
+                    }`}>
+                      {isYouTube ? <Youtube className="h-3 w-3" /> : <Image className="h-3 w-3" />}
                       {ad.media_type}
                     </span>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="aspect-video bg-gradient-to-br from-purple-100 to-blue-100 rounded-lg flex items-center justify-center overflow-hidden">
-                    {ad.content_url ? (
-                      <img src={ad.content_url} alt={ad.title} className="w-full h-full object-cover" />
+                  <div className="aspect-video bg-gradient-to-br from-purple-100 to-blue-100 rounded-lg flex items-center justify-center overflow-hidden relative">
+                    {thumbnail ? (
+                      <>
+                        <img src={thumbnail} alt={ad.title} className="w-full h-full object-cover" />
+                        {isYouTube && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                            <div className="bg-red-600 rounded-full p-2">
+                              <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M8 5v14l11-7z" />
+                              </svg>
+                            </div>
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <Image className="h-12 w-12 text-purple-300" />
                     )}
@@ -154,6 +322,13 @@ const AdsPage: React.FC = () => {
                       <Clock className="h-4 w-4" />
                       <span className="text-xs">Duration: {ad.duration_seconds}s</span>
                     </div>
+                    
+                    {ad.advertiser_name && (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Building2 className="h-4 w-4" />
+                        <span className="text-xs">{ad.advertiser_name}</span>
+                      </div>
+                    )}
                     
                     {adSchedules.length > 0 && (
                       <div className="flex items-center gap-2 text-muted-foreground">
@@ -170,20 +345,104 @@ const AdsPage: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="flex gap-2 pt-2">
-                    <Button variant="outline" size="sm" className="flex-1">
-                      Schedule
-                    </Button>
-                    <Button variant="ghost" size="sm">
-                      Edit
-                    </Button>
-                  </div>
+                  {/* Delete Confirmation */}
+                  {deleteConfirmId === ad.id ? (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-2">
+                      <p className="text-sm text-red-700">Delete this ad and all its schedules?</p>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => deleteAdMutation.mutate(ad.id)}
+                          disabled={deleteAdMutation.isPending}
+                        >
+                          {deleteAdMutation.isPending ? 'Deleting...' : 'Yes, Delete'}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setDeleteConfirmId(null)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2 pt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => handleScheduleAd(ad.id)}
+                      >
+                        <Calendar className="h-4 w-4 mr-1" />
+                        Schedule
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleEditAd(ad)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => setDeleteConfirmId(ad.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </motion.div>
           );
         })}
       </div>
+
+      {/* Empty State */}
+      {ads?.length === 0 && (
+        <Card className="p-12">
+          <div className="text-center">
+            <Image className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No Advertisements</h3>
+            <p className="text-gray-500 mb-4">Get started by adding your first advertisement.</p>
+            <Button onClick={handleAddAd}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Advertisement
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Ad Modal */}
+      <AdModal
+        isOpen={isAdModalOpen}
+        onClose={() => {
+          setIsAdModalOpen(false);
+          setEditingAd(null);
+        }}
+        onSubmit={handleAdModalSubmit}
+        ad={editingAd}
+        isLoading={createAdMutation.isPending || updateAdMutation.isPending}
+      />
+
+      {/* Schedule Modal */}
+      <AdScheduleModal
+        isOpen={isScheduleModalOpen}
+        onClose={() => {
+          setIsScheduleModalOpen(false);
+          setEditingSchedule(null);
+          setSchedulingAdId(undefined);
+        }}
+        onSubmit={handleScheduleModalSubmit}
+        ads={ads || []}
+        schedule={editingSchedule}
+        preselectedAdId={schedulingAdId}
+        isLoading={createScheduleMutation.isPending || updateScheduleMutation.isPending}
+      />
     </div>
   );
 };

@@ -214,13 +214,15 @@ export let mockDisplays: DisplayUnit[] = [
 ];
 
 // Mock Advertisements
-export const mockAds: Advertisement[] = [
+export let mockAds: Advertisement[] = [
   {
     id: '1',
     title: 'Local Business Ad',
     content_url: 'https://via.placeholder.com/1920x1080/14b8a6/ffffff?text=Local+Business',
     media_type: 'image',
     duration_seconds: 10,
+    advertiser_name: 'Metro Business Solutions',
+    advertiser_contact: 'contact@metrobiz.pk',
     metadata: {},
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
@@ -231,6 +233,8 @@ export const mockAds: Advertisement[] = [
     content_url: 'https://via.placeholder.com/1920x1080/f97316/ffffff?text=Stay+Safe',
     media_type: 'image',
     duration_seconds: 8,
+    advertiser_name: 'Islamabad Traffic Police',
+    advertiser_contact: 'info@itp.gov.pk',
     metadata: {},
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
@@ -238,7 +242,7 @@ export const mockAds: Advertisement[] = [
 ];
 
 // Mock Ad Schedules
-export const mockAdSchedules: AdSchedule[] = [
+export let mockAdSchedules: AdSchedule[] = [
   {
     id: '1',
     ad_id: '1',
@@ -508,13 +512,86 @@ export const mockApi = {
   createAd: async (data: any) => {
     await delay(500);
     const newAd: Advertisement = {
-      id: String(mockAds.length + 1),
+      id: String(Date.now()),
       ...data,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
     mockAds.push(newAd);
     return newAd;
+  },
+
+  updateAd: async (id: string, data: Partial<Advertisement>) => {
+    await delay(500);
+    const index = mockAds.findIndex(a => a.id === id);
+    if (index !== -1) {
+      mockAds[index] = {
+        ...mockAds[index],
+        ...data,
+        updated_at: new Date().toISOString(),
+      };
+      return mockAds[index];
+    }
+    throw new Error('Ad not found');
+  },
+
+  deleteAd: async (id: string) => {
+    await delay(500);
+    const index = mockAds.findIndex(a => a.id === id);
+    if (index !== -1) {
+      mockAds.splice(index, 1);
+      // Also remove any schedules for this ad
+      mockAdSchedules = mockAdSchedules.filter(s => s.ad_id !== id);
+    }
+  },
+
+  createSchedule: async (data: { ad_id: string; display_ids: string[]; start_time: string; end_time: string; priority: number }) => {
+    await delay(500);
+    const ad = mockAds.find(a => a.id === data.ad_id);
+    const newSchedules: AdSchedule[] = [];
+    
+    // Create a schedule for each display
+    for (const displayId of data.display_ids) {
+      const display = mockDisplays.find(d => d.id === displayId);
+      const newSchedule: AdSchedule = {
+        id: String(Date.now() + Math.random()),
+        ad_id: data.ad_id,
+        display_id: displayId,
+        display_name: display?.name,
+        start_time: data.start_time,
+        end_time: data.end_time,
+        priority: data.priority,
+        ad: ad,
+        created_at: new Date().toISOString(),
+      };
+      mockAdSchedules.push(newSchedule);
+      newSchedules.push(newSchedule);
+    }
+    
+    return newSchedules;
+  },
+
+  updateSchedule: async (id: string, data: Partial<AdSchedule>) => {
+    await delay(500);
+    const index = mockAdSchedules.findIndex(s => s.id === id);
+    if (index !== -1) {
+      const ad = data.ad_id ? mockAds.find(a => a.id === data.ad_id) : mockAdSchedules[index].ad;
+      mockAdSchedules[index] = {
+        ...mockAdSchedules[index],
+        ...data,
+        ad: ad,
+      };
+      return mockAdSchedules[index];
+    }
+    throw new Error('Schedule not found');
+  },
+
+  deleteSchedule: async (id: string) => {
+    await delay(500);
+    const index = mockAdSchedules.findIndex(s => s.id === id);
+    if (index !== -1) {
+      mockAdSchedules.splice(index, 1);
+    }
   },
 
   // Announcements
