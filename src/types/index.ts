@@ -28,7 +28,7 @@ export interface RegisterUserInput {
 
 // Stop types
 export interface Stop {
-  id: string;
+  id: number;
   name: string;
   description?: string;
   latitude: number;
@@ -44,9 +44,13 @@ export interface CreateStopInput {
   longitude: number;
 }
 
+export interface StopQueryParams {
+  search?: string;
+}
+
 // Route types
 export interface Route {
-  id: string;
+  id: number;
   name: string;
   code: string;
   description?: string;
@@ -57,12 +61,21 @@ export interface Route {
 }
 
 export interface RouteStop {
-  id: string;
-  route_id: string;
-  stop_id: string;
+  id: number;
+  route_id: number;
+  stop_id: number;
   sequence_number: number;
-  distance_from_prev?: number;
+  distance_from_prev?: number | null;
   stop?: Stop;
+}
+
+export interface AddStopToRouteInput {
+  stop_id: number;
+  sequence_number: number;
+}
+
+export interface ReorderStopsInput {
+  route_stop_ids: number[];
 }
 
 export interface CreateRouteInput {
@@ -70,6 +83,10 @@ export interface CreateRouteInput {
   code: string;
   description?: string;
   color?: string;
+}
+
+export interface RouteQueryParams {
+  search?: string;
 }
 
 // Bus types

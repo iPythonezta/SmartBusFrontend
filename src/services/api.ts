@@ -1,4 +1,4 @@
-// API Services - Uses real API for auth/users/buses/dashboard, mock for other features
+// API Services - Uses real API for auth/users/buses/dashboard/stops/routes, mock for other features
 import { mockApi } from './mockApi';
 import { apiClient } from '@/lib/api-client';
 import type {
@@ -11,6 +11,9 @@ import type {
   StopQueryParams,
   Route,
   CreateRouteInput,
+  RouteQueryParams,
+  RouteStop,
+  AddStopToRouteInput,
   Bus,
   CreateBusInput,
   ActiveBus,
@@ -51,28 +54,44 @@ export const usersApi = {
     apiClient.post<{ token: string }>('/register/', data),
 };
 
-// Stops API (Mock - to be implemented)
+// Stops API - Real API
 export const stopsApi = {
-  getStops: (_params?: StopQueryParams) => mockApi.getStops(),
-  getStop: (id: string) => mockApi.getStop(id),
-  createStop: (data: CreateStopInput) => mockApi.createStop(data),
-  updateStop: (id: string, data: Partial<Stop>) =>
-    Promise.resolve({ id, ...data } as Stop),
-  deleteStop: (_id: string) => Promise.resolve(),
+  getStops: async (params?: StopQueryParams) => {
+    const searchParams = new URLSearchParams();
+    if (params?.search) searchParams.append('search', params.search);
+    const queryString = searchParams.toString();
+    return apiClient.get<Stop[]>(`/stops/${queryString ? `?${queryString}` : ''}`);
+  },
+  getStop: (id: number) => apiClient.get<Stop>(`/stops/${id}/`),
+  createStop: (data: CreateStopInput) => apiClient.post<Stop>('/stops/', data),
+  updateStop: (id: number, data: Partial<CreateStopInput>) =>
+    apiClient.patch<Stop>(`/stops/${id}/`, data),
+  deleteStop: (id: number) => apiClient.delete<void>(`/stops/${id}/`),
 };
 
-// Routes API (Mock - to be implemented)
+// Routes API - Real API
 export const routesApi = {
-  getRoutes: (_params?: ListQueryParams) => mockApi.getRoutes(),
-  getRoute: (id: string) => mockApi.getRoute(id),
-  createRoute: (data: CreateRouteInput) => mockApi.createRoute(data),
-  updateRoute: (id: string, data: Partial<Route>) =>
-    Promise.resolve({ id, ...data } as Route),
-  deleteRoute: (_id: string) => Promise.resolve(),
-  addStopToRoute: (_routeId: string, _stopId: string, _sequenceNumber: number) =>
-    Promise.resolve(),
-  reorderRouteStops: (_routeId: string, _routeStopIds: string[]) =>
-    Promise.resolve(),
+  getRoutes: async (params?: RouteQueryParams) => {
+    const searchParams = new URLSearchParams();
+    if (params?.search) searchParams.append('search', params.search);
+    const queryString = searchParams.toString();
+    return apiClient.get<Route[]>(`/routes/${queryString ? `?${queryString}` : ''}`);
+  },
+  getRoute: (id: number) => apiClient.get<Route>(`/routes/${id}/`),
+  createRoute: (data: CreateRouteInput) => apiClient.post<Route>('/routes/', data),
+  updateRoute: (id: number, data: Partial<CreateRouteInput>) =>
+    apiClient.patch<Route>(`/routes/${id}/`, data),
+  deleteRoute: (id: number) => apiClient.delete<void>(`/routes/${id}/`),
+  // Route-stops management
+  addStopToRoute: (routeId: number, data: AddStopToRouteInput) =>
+    apiClient.post<RouteStop>(`/routes/${routeId}/stops/`, data),
+  removeStopFromRoute: (routeId: number, routeStopId: number) =>
+    apiClient.delete<void>(`/routes/${routeId}/stops/${routeStopId}/`),
+  reorderRouteStops: (routeId: number, routeStopIds: number[]) =>
+    apiClient.put<{ message: string; route_stops: RouteStop[] }>(
+      `/routes/${routeId}/stops/reorder/`,
+      { route_stop_ids: routeStopIds }
+    ),
 };
 
 // Buses API - Real API

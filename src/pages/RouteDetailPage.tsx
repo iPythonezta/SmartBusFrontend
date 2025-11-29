@@ -98,10 +98,13 @@ const RouteDetailPageEnhanced: React.FC = () => {
   const [showManageStopsDialog, setShowManageStopsDialog] = useState(false);
   const [selectedStopToAdd, setSelectedStopToAdd] = useState<string>('');
 
+  // Parse route ID as number
+  const routeId = id ? parseInt(id, 10) : undefined;
+
   const { data: route, isLoading: routeLoading } = useQuery({
-    queryKey: ['route', id],
-    queryFn: () => routesApi.getRoute(id!),
-    enabled: !!id,
+    queryKey: ['route', routeId],
+    queryFn: () => routesApi.getRoute(routeId!),
+    enabled: !!routeId,
   });
 
   const { data: buses } = useQuery({
@@ -114,7 +117,7 @@ const RouteDetailPageEnhanced: React.FC = () => {
     queryFn: () => stopsApi.getStops(),
   });
 
-  const assignedBuses = buses?.filter((b) => b.assigned_route_id === id);
+  const assignedBuses = buses?.filter((b) => b.route_id === routeId);
 
   // Get available stops (not already in this route)
   const availableStops = allStops?.filter(
@@ -133,7 +136,7 @@ const RouteDetailPageEnhanced: React.FC = () => {
 
   // Delete route mutation
   const deleteMutation = useMutation({
-    mutationFn: () => routesApi.deleteRoute(id!),
+    mutationFn: () => routesApi.deleteRoute(routeId!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['routes'] });
       toast({
@@ -153,10 +156,10 @@ const RouteDetailPageEnhanced: React.FC = () => {
 
   // Add stop to route mutation
   const addStopMutation = useMutation({
-    mutationFn: ({ stopId }: { stopId: string }) =>
-      routesApi.addStopToRoute(id!, stopId, sortedStops.length + 1),
+    mutationFn: ({ stopId }: { stopId: number }) =>
+      routesApi.addStopToRoute(routeId!, { stop_id: stopId, sequence_number: sortedStops.length + 1 }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['route', id] });
+      queryClient.invalidateQueries({ queryKey: ['route', routeId] });
       toast({
         title: 'Success',
         description: 'Stop added to route',
@@ -172,14 +175,58 @@ const RouteDetailPageEnhanced: React.FC = () => {
     },
   });
 
+  // Remove stop from route mutation
+  const removeStopMutation = useMutation({
+    mutationFn: ({ routeStopId }: { routeStopId: number }) =>
+      routesApi.removeStopFromRoute(routeId!, routeStopId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['route', routeId] });
+      toast({
+        title: 'Success',
+        description: 'Stop removed from route',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to remove stop',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Reorder stops mutation
+  const reorderStopsMutation = useMutation({
+    mutationFn: (routeStopIds: number[]) =>
+      routesApi.reorderRouteStops(routeId!, routeStopIds),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['route', routeId] });
+      toast({
+        title: 'Success',
+        description: 'Stops reordered successfully',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to reorder stops',
+        variant: 'destructive',
+      });
+    },
+  });
+
   const handleDeleteRoute = () => {
     deleteMutation.mutate();
   };
 
   const handleAddStop = () => {
     if (selectedStopToAdd) {
-      addStopMutation.mutate({ stopId: selectedStopToAdd });
+      addStopMutation.mutate({ stopId: parseInt(selectedStopToAdd, 10) });
     }
+  };
+
+  const handleRemoveStop = (routeStopId: number) => {
+    removeStopMutation.mutate({ routeStopId });
   };
 
   const sensors = useSensors(
@@ -193,13 +240,16 @@ const RouteDetailPageEnhanced: React.FC = () => {
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      setSortedStops((items) => {
-        const oldIndex = items.findIndex((item) => item.id === active.id);
-        const newIndex = items.findIndex((item) => item.id === over.id);
-        return arrayMove(items, oldIndex, newIndex);
-      });
-      // In real app, call API to update sequence
-      // routesApi.reorderRouteStops(id!, reorderedIds)
+      const oldIndex = sortedStops.findIndex((item) => item.id === active.id);
+      const newIndex = sortedStops.findIndex((item) => item.id === over.id);
+      const reordered = arrayMove(sortedStops, oldIndex, newIndex);
+      
+      // Optimistically update UI
+      setSortedStops(reordered);
+      
+      // Call API to persist the new order
+      const reorderedIds = reordered.map((rs) => rs.id);
+      reorderStopsMutation.mutate(reorderedIds);
     }
   };
 
@@ -459,7 +509,7 @@ const RouteDetailPageEnhanced: React.FC = () => {
                   </SelectTrigger>
                   <SelectContent>
                     {availableStops?.map((stop) => (
-                      <SelectItem key={stop.id} value={stop.id}>
+                      <SelectItem key={stop.id} value={String(stop.id)}>
                         {stop.name}
                       </SelectItem>
                     ))}
@@ -502,15 +552,14 @@ const RouteDetailPageEnhanced: React.FC = () => {
                       variant="ghost"
                       size="sm"
                       className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                      onClick={() => {
-                        // Remove stop from route (would call API in real app)
-                        toast({
-                          title: 'Info',
-                          description: 'Remove stop functionality coming soon',
-                        });
-                      }}
+                      disabled={removeStopMutation.isPending}
+                      onClick={() => handleRemoveStop(rs.id)}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      {removeStopMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
                     </Button>
                   </div>
                 ))}

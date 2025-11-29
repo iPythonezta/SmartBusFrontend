@@ -35,7 +35,7 @@ export const MapboxMap: React.FC<MapboxMapProps> = ({
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const busMarkers = useRef<Map<number | string, mapboxgl.Marker>>(new Map());
-  const stopMarkers = useRef<Map<string, mapboxgl.Marker>>(new Map());
+  const stopMarkers = useRef<Map<number, mapboxgl.Marker>>(new Map());
   const [mapLoaded, setMapLoaded] = useState(false);
 
   // Initialize map

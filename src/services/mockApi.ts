@@ -35,7 +35,7 @@ export const mockUsers: User[] = [
 // Mock Stops
 export const mockStops: Stop[] = [
   {
-    id: '1',
+    id: 1,
     name: 'Blue Area',
     description: 'Main business district',
     latitude: 33.7077,
@@ -44,7 +44,7 @@ export const mockStops: Stop[] = [
     updated_at: '2024-01-01T00:00:00Z',
   },
   {
-    id: '2',
+    id: 2,
     name: 'Secretariat',
     description: 'Government offices',
     latitude: 33.7295,
@@ -53,7 +53,7 @@ export const mockStops: Stop[] = [
     updated_at: '2024-01-01T00:00:00Z',
   },
   {
-    id: '3',
+    id: 3,
     name: 'Aabpara',
     description: 'Shopping area',
     latitude: 33.7184,
@@ -62,7 +62,7 @@ export const mockStops: Stop[] = [
     updated_at: '2024-01-01T00:00:00Z',
   },
   {
-    id: '4',
+    id: 4,
     name: 'Melody',
     description: 'Food Street',
     latitude: 33.6973,
@@ -71,7 +71,7 @@ export const mockStops: Stop[] = [
     updated_at: '2024-01-01T00:00:00Z',
   },
   {
-    id: '5',
+    id: 5,
     name: 'Zero Point',
     description: 'Junction',
     latitude: 33.6938,
@@ -80,7 +80,7 @@ export const mockStops: Stop[] = [
     updated_at: '2024-01-01T00:00:00Z',
   },
   {
-    id: '6',
+    id: 6,
     name: 'Faizabad',
     description: 'Interchange',
     latitude: 33.6507,
@@ -93,7 +93,7 @@ export const mockStops: Stop[] = [
 // Mock Routes
 export const mockRoutes: Route[] = [
   {
-    id: '1',
+    id: 1,
     name: 'Blue Line',
     code: 'BL-01',
     description: 'Blue Area to Faizabad',
@@ -101,14 +101,14 @@ export const mockRoutes: Route[] = [
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
     route_stops: [
-      { id: '1', route_id: '1', stop_id: '1', sequence_number: 1, distance_from_prev: 0, stop: mockStops[0] },
-      { id: '2', route_id: '1', stop_id: '3', sequence_number: 2, distance_from_prev: 1500, stop: mockStops[2] },
-      { id: '3', route_id: '1', stop_id: '5', sequence_number: 3, distance_from_prev: 2000, stop: mockStops[4] },
-      { id: '4', route_id: '1', stop_id: '6', sequence_number: 4, distance_from_prev: 4500, stop: mockStops[5] },
+      { id: 1, route_id: 1, stop_id: 1, sequence_number: 1, distance_from_prev: 0, stop: mockStops[0] },
+      { id: 2, route_id: 1, stop_id: 3, sequence_number: 2, distance_from_prev: 1500, stop: mockStops[2] },
+      { id: 3, route_id: 1, stop_id: 5, sequence_number: 3, distance_from_prev: 2000, stop: mockStops[4] },
+      { id: 4, route_id: 1, stop_id: 6, sequence_number: 4, distance_from_prev: 4500, stop: mockStops[5] },
     ],
   },
   {
-    id: '2',
+    id: 2,
     name: 'Green Line',
     code: 'GL-01',
     description: 'Secretariat to Melody',
@@ -116,9 +116,9 @@ export const mockRoutes: Route[] = [
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
     route_stops: [
-      { id: '5', route_id: '2', stop_id: '2', sequence_number: 1, distance_from_prev: 0, stop: mockStops[1] },
-      { id: '6', route_id: '2', stop_id: '3', sequence_number: 2, distance_from_prev: 2500, stop: mockStops[2] },
-      { id: '7', route_id: '2', stop_id: '4', sequence_number: 3, distance_from_prev: 2000, stop: mockStops[3] },
+      { id: 5, route_id: 2, stop_id: 2, sequence_number: 1, distance_from_prev: 0, stop: mockStops[1] },
+      { id: 6, route_id: 2, stop_id: 3, sequence_number: 2, distance_from_prev: 2500, stop: mockStops[2] },
+      { id: 7, route_id: 2, stop_id: 4, sequence_number: 3, distance_from_prev: 2000, stop: mockStops[3] },
     ],
   },
 ];
@@ -406,7 +406,7 @@ export const mockApi = {
     return mockStops;
   },
 
-  getStop: async (id: string) => {
+  getStop: async (id: number) => {
     await delay(300);
     return mockStops.find(s => s.id === id) || mockStops[0];
   },
@@ -414,7 +414,7 @@ export const mockApi = {
   createStop: async (data: any) => {
     await delay(500);
     const newStop: Stop = {
-      id: String(mockStops.length + 1),
+      id: mockStops.length + 1,
       ...data,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -429,7 +429,7 @@ export const mockApi = {
     return mockRoutes;
   },
 
-  getRoute: async (id: string) => {
+  getRoute: async (id: number) => {
     await delay(300);
     return mockRoutes.find(r => r.id === id) || mockRoutes[0];
   },
@@ -437,7 +437,7 @@ export const mockApi = {
   createRoute: async (data: any) => {
     await delay(500);
     const newRoute: Route = {
-      id: String(mockRoutes.length + 1),
+      id: mockRoutes.length + 1,
       ...data,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -488,7 +488,7 @@ export const mockApi = {
 
   createDisplay: async (data: { name: string; stop_id: string; location?: string; status: 'online' | 'offline' }) => {
     await delay(500);
-    const stop = mockStops.find(s => s.id === data.stop_id);
+    const stop = mockStops.find(s => s.id === parseInt(data.stop_id, 10));
     const newDisplay: DisplayUnit = {
       id: String(mockDisplays.length + 1 + Date.now()),
       name: data.name,
@@ -507,7 +507,7 @@ export const mockApi = {
     await delay(500);
     const index = mockDisplays.findIndex(d => d.id === id);
     if (index !== -1) {
-      const stop = data.stop_id ? mockStops.find(s => s.id === data.stop_id) : mockDisplays[index].stop;
+      const stop = data.stop_id ? mockStops.find(s => s.id === parseInt(data.stop_id!, 10)) : mockDisplays[index].stop;
       mockDisplays[index] = {
         ...mockDisplays[index],
         ...data,

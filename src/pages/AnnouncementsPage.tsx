@@ -132,7 +132,7 @@ const AnnouncementsPage: React.FC = () => {
   const getRouteNames = (routeIds: string[]) => {
     if (!routes || routeIds.length === 0) return 'All Routes';
     return routeIds
-      .map(id => routes.find(r => r.id === id)?.name)
+      .map(id => routes.find(r => String(r.id) === id)?.name)
       .filter(Boolean)
       .join(', ') || 'All Routes';
   };

@@ -194,7 +194,7 @@ const BusDetailPage: React.FC = () => {
                 }}
                 buses={bus.last_location ? [bus] : []}
                 stops={bus.route?.stops?.map(s => ({
-                  id: String(s.stop_id),
+                  id: s.stop_id,
                   name: s.stop_name,
                   latitude: s.latitude,
                   longitude: s.longitude,

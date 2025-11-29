@@ -134,7 +134,7 @@ const AnnouncementModal: React.FC<AnnouncementModalProps> = ({
 
   const selectAllRoutes = () => {
     if (routes) {
-      setSelectedRouteIds(routes.map(r => r.id));
+      setSelectedRouteIds(routes.map(r => String(r.id)));
     }
   };
 
@@ -252,11 +252,11 @@ const AnnouncementModal: React.FC<AnnouncementModalProps> = ({
             </div>
             <div className="border rounded-lg max-h-40 overflow-y-auto">
               {routes?.map((route: RouteType) => {
-                const isSelected = selectedRouteIds.includes(route.id);
+                const isSelected = selectedRouteIds.includes(String(route.id));
                 return (
                   <div
                     key={route.id}
-                    onClick={() => toggleRoute(route.id)}
+                    onClick={() => toggleRoute(String(route.id))}
                     className={`flex items-center gap-3 p-2 cursor-pointer hover:bg-gray-50 border-b last:border-b-0 ${
                       isSelected ? 'bg-blue-50' : ''
                     }`}

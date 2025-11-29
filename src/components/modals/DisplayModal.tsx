@@ -133,7 +133,7 @@ const DisplayModal: React.FC<DisplayModalProps> = ({
               </SelectTrigger>
               <SelectContent>
                 {stops?.map((stop: Stop) => (
-                  <SelectItem key={stop.id} value={stop.id}>
+                  <SelectItem key={stop.id} value={String(stop.id)}>
                     {stop.name}
                   </SelectItem>
                 ))}
