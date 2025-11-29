@@ -2,7 +2,6 @@ import React, { useRef, useEffect, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import type { Bus, Stop } from '@/types';
-import { realtimeService } from '@/services/realtime';
 import { routingService } from '@/services/routing';
 
 // Set Mapbox access token
@@ -75,10 +74,50 @@ export const MapboxMap: React.FC<MapboxMapProps> = ({
     };
   }, []);
 
+  // Helper function to format time ago
+  const formatTimeAgo = (timestamp: string): string => {
+    const now = new Date();
+    const then = new Date(timestamp);
+    const diffMs = now.getTime() - then.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHour = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHour / 24);
+
+    if (diffDay > 0) return `${diffDay}d ago`;
+    if (diffHour > 0) return `${diffHour}h ago`;
+    if (diffMin > 0) return `${diffMin}m ago`;
+    return 'Just now';
+  };
+
+  // Check if timestamp is older than 1 minute
+  const isOlderThanOneMinute = (timestamp: string): boolean => {
+    const now = new Date();
+    const then = new Date(timestamp);
+    return (now.getTime() - then.getTime()) > 60000; // 60 seconds
+  };
+
   // Helper function to create distinctive bus marker element
-  const createBusMarkerElement = (bus: Bus, location: { speed: number; heading: number }) => {
+  const createBusMarkerElement = (
+    bus: Bus, 
+    location: { speed: number; heading: number; timestamp: string },
+    status: 'active' | 'inactive' | 'maintenance'
+  ) => {
     const el = document.createElement('div');
     el.className = 'bus-marker';
+    
+    const isActive = status === 'active';
+    const isStale = isOlderThanOneMinute(location.timestamp);
+    const showLastSeen = !isActive || isStale;
+    
+    // Colors based on status
+    const colors = {
+      active: { bg: '#1e40af', gradient: 'linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)', shadow: 'rgba(59, 130, 246, 0.5)' },
+      inactive: { bg: '#6b7280', gradient: 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)', shadow: 'rgba(107, 114, 128, 0.5)' },
+      maintenance: { bg: '#d97706', gradient: 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)', shadow: 'rgba(217, 119, 6, 0.5)' },
+    };
+    const color = colors[status];
+    
     el.style.cssText = `
       display: flex;
       flex-direction: column;
@@ -87,18 +126,64 @@ export const MapboxMap: React.FC<MapboxMapProps> = ({
       cursor: pointer;
     `;
 
-    el.innerHTML = `
+    // Status badge for inactive/maintenance
+    const statusBadge = !isActive ? `
       <div style="
-        background: #1e40af;
-        color: white;
-        padding: 2px 8px;
-        border-radius: 12px;
-        font-size: 11px;
+        background: ${status === 'maintenance' ? '#fef3c7' : '#f3f4f6'};
+        color: ${status === 'maintenance' ? '#92400e' : '#374151'};
+        padding: 2px 6px;
+        border-radius: 8px;
+        font-size: 9px;
         font-weight: 700;
-        white-space: nowrap;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        text-transform: uppercase;
+        margin-bottom: 2px;
         font-family: system-ui, -apple-system, sans-serif;
-      ">${location.speed} km/h</div>
+      ">${status}</div>
+    ` : '';
+
+    // Speed or Last Seen display
+    const topLabel = showLastSeen 
+      ? `<div style="
+          background: ${isActive ? '#1e40af' : color.bg};
+          color: white;
+          padding: 2px 8px;
+          border-radius: 12px;
+          font-size: 10px;
+          font-weight: 600;
+          white-space: nowrap;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+          font-family: system-ui, -apple-system, sans-serif;
+        ">🕐 ${formatTimeAgo(location.timestamp)}</div>`
+      : `<div style="
+          background: #1e40af;
+          color: white;
+          padding: 2px 8px;
+          border-radius: 12px;
+          font-size: 11px;
+          font-weight: 700;
+          white-space: nowrap;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+          font-family: system-ui, -apple-system, sans-serif;
+        ">${location.speed != null ? location.speed + ' km/h' : 'N/A'}</div>`;
+
+    // Pulse animation only for active buses
+    const pulseAnimation = isActive && !isStale ? `
+      <div style="
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 40px;
+        height: 40px;
+        background: ${color.shadow.replace('0.5', '0.2')};
+        border-radius: 50%;
+        animation: busPulse 2s infinite;
+        pointer-events: none;
+      "></div>
+    ` : '';
+
+    el.innerHTML = `
+      ${statusBadge}
+      ${topLabel}
       <div style="
         position: relative;
         width: 40px;
@@ -108,42 +193,33 @@ export const MapboxMap: React.FC<MapboxMapProps> = ({
           position: absolute;
           width: 40px;
           height: 40px;
-          background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
+          background: ${color.gradient};
           border: 3px solid white;
           border-radius: 50%;
-          box-shadow: 0 4px 12px rgba(59, 130, 246, 0.5);
+          box-shadow: 0 4px 12px ${color.shadow};
           display: flex;
           align-items: center;
           justify-content: center;
-          transform: rotate(${location.heading}deg);
+          transform: rotate(${location.heading || 0}deg);
+          ${!isActive ? 'opacity: 0.7;' : ''}
         ">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
             <path d="M12 2L2 7v10c0 5 10 5 10 5s10 0 10-5V7L12 2z"/>
             <path d="M12 2v20" stroke="white" stroke-width="2"/>
           </svg>
         </div>
-        <div style="
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 40px;
-          height: 40px;
-          background: rgba(59, 130, 246, 0.2);
-          border-radius: 50%;
-          animation: busPulse 2s infinite;
-          pointer-events: none;
-        "></div>
+        ${pulseAnimation}
       </div>
       <div style="
         background: white;
-        color: #1e40af;
+        color: ${color.bg};
         padding: 2px 8px;
         border-radius: 4px;
         font-size: 10px;
         font-weight: 700;
         white-space: nowrap;
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-        border: 1px solid #3b82f6;
+        border: 1px solid ${color.bg};
         font-family: system-ui, -apple-system, sans-serif;
       ">${bus.registration_number}</div>
       <style>
@@ -327,12 +403,10 @@ export const MapboxMap: React.FC<MapboxMapProps> = ({
     };
   }, [stops.map(s => s.id).join(','), showRoute, routeColor, mapLoaded]); // Only re-run when stop IDs change
 
-  // Add bus markers with real-time updates - CRITICAL: Only re-run when bus IDs change
+  // Add bus markers - Updates when bus data changes (from backend polling)
   useEffect(() => {
     if (!map.current || !mapLoaded || buses.length === 0) return;
 
-    const unsubscribeFunctions: (() => void)[] = [];
-    
     // Create a stable reference to buses data
     const busesData = buses.map(bus => ({
       id: bus.id,
@@ -342,23 +416,43 @@ export const MapboxMap: React.FC<MapboxMapProps> = ({
       last_location: bus.last_location,
     }));
 
+    // Remove markers for buses no longer in the list
+    const currentBusIds = new Set(busesData.map(b => b.id));
+    busMarkers.current.forEach((marker, busId) => {
+      if (!currentBusIds.has(busId as number)) {
+        marker.remove();
+        busMarkers.current.delete(busId);
+      }
+    });
+
     busesData.forEach((bus) => {
-      if (!bus.last_location || bus.status !== 'active') return;
+      // Show bus on map if it has location data (regardless of status)
+      if (!bus.last_location) {
+        // Remove marker if bus has no location
+        const existingMarker = busMarkers.current.get(bus.id);
+        if (existingMarker) {
+          existingMarker.remove();
+          busMarkers.current.delete(bus.id);
+        }
+        return;
+      }
 
       const location = bus.last_location;
+      const isStale = isOlderThanOneMinute(location.timestamp);
+      const statusColor = bus.status === 'active' ? '#059669' : bus.status === 'maintenance' ? '#d97706' : '#6b7280';
       
       // Check if marker already exists
       const existingMarker = busMarkers.current.get(bus.id);
       if (existingMarker) {
-        // Just update the existing marker's position and visual
+        // Update the existing marker's position and visual
         existingMarker.setLngLat([location.longitude, location.latitude]);
-        const newEl = createBusMarkerElement(bus as Bus, location);
+        const newEl = createBusMarkerElement(bus as Bus, location, bus.status);
         existingMarker.getElement().innerHTML = newEl.innerHTML;
         return;
       }
       
       // Create new marker
-      const el = createBusMarkerElement(bus as Bus, location);
+      const el = createBusMarkerElement(bus as Bus, location, bus.status);
 
       const marker = new mapboxgl.Marker({
         element: el,
@@ -367,26 +461,35 @@ export const MapboxMap: React.FC<MapboxMapProps> = ({
         .setLngLat([location.longitude, location.latitude])
         .setPopup(
           new mapboxgl.Popup({ offset: 25 }).setHTML(`
-            <div style="font-family: system-ui; padding: 12px; min-width: 200px;">
+            <div style="font-family: system-ui; padding: 12px; min-width: 220px;">
               <h3 style="font-weight: 700; color: #1e40af; margin: 0 0 12px 0; font-size: 16px;">
                 ${bus.registration_number}
               </h3>
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px;">
                 <div>
                   <div style="color: #64748b; font-size: 11px; margin-bottom: 4px;">Speed</div>
-                  <div style="font-weight: 600; color: #1e40af;">${location.speed} km/h</div>
+                  <div style="font-weight: 600; color: #1e40af;">${location.speed != null ? location.speed + ' km/h' : 'N/A'}</div>
                 </div>
                 <div>
                   <div style="color: #64748b; font-size: 11px; margin-bottom: 4px;">Heading</div>
-                  <div style="font-weight: 600; color: #1e40af;">${location.heading}°</div>
+                  <div style="font-weight: 600; color: #1e40af;">${location.heading != null ? location.heading + '°' : 'N/A'}</div>
                 </div>
                 <div>
                   <div style="color: #64748b; font-size: 11px; margin-bottom: 4px;">Status</div>
-                  <div style="font-weight: 600; color: #059669; text-transform: capitalize;">${bus.status}</div>
+                  <div style="font-weight: 600; color: ${statusColor}; text-transform: capitalize;">${bus.status}</div>
                 </div>
                 <div>
                   <div style="color: #64748b; font-size: 11px; margin-bottom: 4px;">Capacity</div>
                   <div style="font-weight: 600; color: #1e40af;">${bus.capacity}</div>
+                </div>
+              </div>
+              <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e2e8f0;">
+                <div style="color: #64748b; font-size: 11px; margin-bottom: 4px;">Last Update</div>
+                <div style="font-weight: 600; color: ${isStale ? '#d97706' : '#059669'}; font-size: 12px;">
+                  ${isStale ? '🕐 ' + formatTimeAgo(location.timestamp) : '✓ Just now'}
+                </div>
+                <div style="color: #94a3b8; font-size: 10px; margin-top: 2px;">
+                  ${new Date(location.timestamp).toLocaleString()}
                 </div>
               </div>
             </div>
@@ -395,64 +498,12 @@ export const MapboxMap: React.FC<MapboxMapProps> = ({
         .addTo(map.current!);
 
       busMarkers.current.set(bus.id, marker);
-
-      // Subscribe to real-time updates - this updates the marker WITHOUT re-rendering the component
-      const unsubscribe = realtimeService.subscribe(String(bus.id), (_busId, newLocation) => {
-        const existingMarker = busMarkers.current.get(bus.id);
-        if (existingMarker) {
-          // Update marker position smoothly
-          existingMarker.setLngLat([newLocation.longitude, newLocation.latitude]);
-          
-          // Update marker element with new speed and heading
-          const newEl = createBusMarkerElement(bus as Bus, newLocation);
-          existingMarker.getElement().innerHTML = newEl.innerHTML;
-          
-          // Update popup content
-          existingMarker.setPopup(
-            new mapboxgl.Popup({ offset: 25 }).setHTML(`
-              <div style="font-family: system-ui; padding: 12px; min-width: 200px;">
-                <h3 style="font-weight: 700; color: #1e40af; margin: 0 0 12px 0; font-size: 16px;">
-                  ${bus.registration_number}
-                </h3>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px;">
-                  <div>
-                    <div style="color: #64748b; font-size: 11px; margin-bottom: 4px;">Speed</div>
-                    <div style="font-weight: 600; color: #1e40af;">${newLocation.speed} km/h</div>
-                  </div>
-                  <div>
-                    <div style="color: #64748b; font-size: 11px; margin-bottom: 4px;">Heading</div>
-                    <div style="font-weight: 600; color: #1e40af;">${newLocation.heading}°</div>
-                  </div>
-                  <div>
-                    <div style="color: #64748b; font-size: 11px; margin-bottom: 4px;">Status</div>
-                    <div style="font-weight: 600; color: #059669; text-transform: capitalize;">${bus.status}</div>
-                  </div>
-                  <div>
-                    <div style="color: #64748b; font-size: 11px; margin-bottom: 4px;">Capacity</div>
-                    <div style="font-weight: 600; color: #1e40af;">${bus.capacity}</div>
-                  </div>
-                </div>
-              </div>
-            `)
-          );
-        }
-      });
-
-      unsubscribeFunctions.push(unsubscribe);
     });
 
     return () => {
-      unsubscribeFunctions.forEach(fn => fn());
-      // Only remove markers for buses that are no longer in the list
-      const currentBusIds = new Set(busesData.map(b => b.id));
-      busMarkers.current.forEach((marker, busId) => {
-        if (!currentBusIds.has(busId as number)) {
-          marker.remove();
-          busMarkers.current.delete(busId);
-        }
-      });
+      // Cleanup is handled above - we only remove markers for buses no longer in the list
     };
-  }, [buses.map(b => b.id).join(','), mapLoaded]); // Only re-run when bus IDs change, not the entire objects
+  }, [buses, mapLoaded]); // Re-run when buses data changes (from backend polling)
 
   return (
     <div

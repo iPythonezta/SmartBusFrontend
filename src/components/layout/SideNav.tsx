@@ -11,6 +11,7 @@ import {
   Megaphone,
   Users,
   Settings,
+  Zap,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUIStore } from '@/store';
@@ -29,6 +30,7 @@ const SideNav: React.FC = () => {
     { to: '/display-units', icon: Monitor, label: t('nav.displays') },
     { to: '/ads', icon: Image, label: t('nav.ads') },
     { to: '/announcements', icon: Megaphone, label: t('nav.announcements') },
+    { to: '/gps-simulator', icon: Zap, label: 'GPS Simulator' },
     ...(isAdmin ? [{ to: '/users', icon: Users, label: t('nav.users') }] : []),
     { to: '/settings', icon: Settings, label: t('nav.settings') },
   ];

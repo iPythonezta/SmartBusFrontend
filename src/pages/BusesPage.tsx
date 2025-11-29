@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { busesApi } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, Eye, Navigation, Activity } from 'lucide-react';
+import { Plus, Eye, Navigation, Activity, MapPinOff } from 'lucide-react';
 import { cn, formatDateTime } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { BusModal } from '@/components/modals/BusModal';
@@ -18,6 +18,8 @@ const BusesPage: React.FC = () => {
   const { data: buses, isLoading } = useQuery({
     queryKey: ['buses'],
     queryFn: () => busesApi.getBuses(),
+    // Refetch every 3 seconds to get latest location data from backend
+    refetchInterval: 3000,
   });
 
   const getStatusColor = (status: string) => {
@@ -163,13 +165,18 @@ const BusesPage: React.FC = () => {
                   </div>
                 )}
 
-                {bus.last_location && (
+                {bus.last_location ? (
                   <div className="text-sm text-muted-foreground">
                     <div className="flex items-center gap-2">
                       <span>Speed: {bus.last_location.speed} km/h</span>
                       <span>•</span>
                       <span>Last seen: {formatDateTime(bus.last_location.timestamp)}</span>
                     </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-sm">
+                    <MapPinOff className="h-4 w-4 text-amber-500" />
+                    <span className="text-amber-600 font-medium">No GPS Data</span>
                   </div>
                 )}
 

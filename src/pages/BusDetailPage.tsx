@@ -1,14 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { busesApi } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Bus, Navigation, MapPin, Activity, Calendar } from 'lucide-react';
+import { ArrowLeft, Bus, Navigation, MapPin, Activity, Calendar, MapPinOff } from 'lucide-react';
 import { BusModal } from '@/components/modals/BusModal';
 import { toast } from '@/components/ui/use-toast';
-import { realtimeService } from '@/services/realtime';
-import type { BusLocation } from '@/types';
 import { MapboxMap } from '@/components/map/MapboxMap';
 
 const BusDetailPage: React.FC = () => {
@@ -16,7 +14,6 @@ const BusDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showEditModal, setShowEditModal] = useState(false);
-  const [liveLocation, setLiveLocation] = useState<BusLocation | null>(null);
   
   const busId = id ? parseInt(id, 10) : undefined;
   
@@ -24,23 +21,12 @@ const BusDetailPage: React.FC = () => {
     queryKey: ['bus', busId],
     queryFn: () => busesApi.getBus(busId!),
     enabled: !!busId,
+    // Refetch every 3 seconds to get latest location from backend
+    refetchInterval: 3000,
   });
 
-  // Subscribe to real-time location updates
-  useEffect(() => {
-    if (!bus || !busId) return;
-
-    const unsubscribe = realtimeService.subscribe(String(busId), (_busId, location) => {
-      setLiveLocation(location);
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, [bus, busId]);
-
-  // Use live location if available, otherwise use last known location
-  const displayLocation = liveLocation || bus?.last_location;
+  // Only use location data from the backend - no simulation
+  const displayLocation = bus?.last_location;
 
   const deleteMutation = useMutation({
     mutationFn: () => busesApi.deleteBus(busId!),
@@ -193,17 +179,9 @@ const BusDetailPage: React.FC = () => {
       {displayLocation && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Navigation className="h-5 w-5 text-teal-600" />
-                <CardTitle>Live Location</CardTitle>
-              </div>
-              {liveLocation && (
-                <div className="flex items-center gap-2 text-sm text-green-600">
-                  <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse" />
-                  <span className="font-medium">LIVE</span>
-                </div>
-              )}
+            <div className="flex items-center gap-2">
+              <Navigation className="h-5 w-5 text-teal-600" />
+              <CardTitle>Location Data</CardTitle>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -214,7 +192,7 @@ const BusDetailPage: React.FC = () => {
                   latitude: displayLocation.latitude,
                   zoom: 14,
                 }}
-                buses={bus.status === 'active' && bus.last_location ? [bus] : []}
+                buses={bus.last_location ? [bus] : []}
                 stops={bus.route?.stops?.map(s => ({
                   id: String(s.stop_id),
                   name: s.stop_name,
@@ -235,18 +213,49 @@ const BusDetailPage: React.FC = () => {
               <div className="text-center p-3 bg-muted rounded-lg">
                 <Activity className="h-5 w-5 mx-auto mb-1 text-teal-600" />
                 <p className="text-xs text-muted-foreground">Speed</p>
-                <p className="text-lg font-bold">{displayLocation.speed} km/h</p>
+                <p className="text-lg font-bold">
+                  {displayLocation.speed != null ? `${displayLocation.speed} km/h` : 'N/A'}
+                </p>
               </div>
               <div className="text-center p-3 bg-muted rounded-lg">
                 <Navigation className="h-5 w-5 mx-auto mb-1 text-blue-600" />
                 <p className="text-xs text-muted-foreground">Heading</p>
-                <p className="text-lg font-bold">{displayLocation.heading}°</p>
+                <p className="text-lg font-bold">
+                  {displayLocation.heading != null ? `${displayLocation.heading}°` : 'N/A'}
+                </p>
               </div>
               <div className="text-center p-3 bg-muted rounded-lg">
                 <MapPin className="h-5 w-5 mx-auto mb-1 text-purple-600" />
                 <p className="text-xs text-muted-foreground">Last Update</p>
                 <p className="text-xs font-medium">{new Date(displayLocation.timestamp).toLocaleTimeString()}</p>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {!displayLocation && (
+        <Card className="border-amber-200 bg-amber-50/30">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <MapPinOff className="h-5 w-5 text-amber-500" />
+              <CardTitle className="text-amber-700">No GPS Data Available</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center py-8">
+              <MapPinOff className="h-16 w-16 mx-auto mb-4 text-amber-400 opacity-50" />
+              <p className="text-lg font-medium text-amber-700">
+                This bus has not reported its location yet
+              </p>
+              <p className="text-sm text-muted-foreground mt-2">
+                Location data will appear here once the bus starts transmitting GPS signals.
+              </p>
+              {bus.last_location?.timestamp && (
+                <p className="text-xs text-muted-foreground mt-4">
+                  Last data received: {new Date(bus.last_location.timestamp).toLocaleString()}
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>

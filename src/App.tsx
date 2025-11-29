@@ -19,6 +19,7 @@ import AdsPage from './pages/AdsPage';
 import AnnouncementsPage from './pages/AnnouncementsPage';
 import UsersPage from './pages/UsersPage';
 import SettingsPage from './pages/SettingsPage';
+import GPSSimulatorPage from './pages/GPSSimulatorPage';
 
 // Layout
 import MainLayout from './components/layout/MainLayout';
@@ -52,6 +53,7 @@ function App() {
           <Route path="/display-units" element={<DisplaysPage />} />
           <Route path="/ads" element={<AdsPage />} />
           <Route path="/announcements" element={<AnnouncementsPage />} />
+          <Route path="/gps-simulator" element={<GPSSimulatorPage />} />
           <Route path="/users" element={<ProtectedRoute requireAdmin><UsersPage /></ProtectedRoute>} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>

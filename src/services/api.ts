@@ -77,15 +77,21 @@ export const routesApi = {
 
 // Buses API - Real API
 export const busesApi = {
-  getBuses: (params?: { status?: string; route_id?: number; search?: string }) => {
+  getBuses: async (params?: { status?: string; route_id?: number; search?: string }) => {
     const searchParams = new URLSearchParams();
     if (params?.status) searchParams.append('status', params.status);
     if (params?.route_id) searchParams.append('route_id', params.route_id.toString());
     if (params?.search) searchParams.append('search', params.search);
     const queryString = searchParams.toString();
-    return apiClient.get<Bus[]>(`/buses/${queryString ? `?${queryString}` : ''}`);
+    const response = await apiClient.get<Bus[]>(`/buses/${queryString ? `?${queryString}` : ''}`);
+    console.log('[DEBUG] getBuses response:', response);
+    return response;
   },
-  getBus: (id: number) => apiClient.get<Bus>(`/buses/${id}/`),
+  getBus: async (id: number) => {
+    const response = await apiClient.get<Bus>(`/buses/${id}/`);
+    console.log('[DEBUG] getBus response:', response);
+    return response;
+  },
   createBus: (data: CreateBusInput) => apiClient.post<Bus>('/buses/', data),
   updateBus: (id: number, data: Partial<CreateBusInput>) => 
     apiClient.patch<Bus>(`/buses/${id}/`, data),
