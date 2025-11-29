@@ -23,7 +23,7 @@ const busSchema = z.object({
     .min(10, 'Capacity must be at least 10')
     .max(100, 'Capacity must not exceed 100'),
   status: z.enum(['active', 'inactive', 'maintenance']).optional(),
-  assigned_route_id: z.string().optional(),
+  route_id: z.number().nullable().optional(),
 });
 
 type BusFormData = z.infer<typeof busSchema>;
@@ -56,12 +56,12 @@ export const BusModal: React.FC<BusModalProps> = ({ open, onClose, bus }) => {
       registration_number: '',
       capacity: 50,
       status: 'inactive',
-      assigned_route_id: undefined,
+      route_id: null,
     },
   });
 
   const statusValue = watch('status');
-  const assignedRouteId = watch('assigned_route_id');
+  const routeId = watch('route_id');
 
   useEffect(() => {
     if (bus) {
@@ -69,14 +69,14 @@ export const BusModal: React.FC<BusModalProps> = ({ open, onClose, bus }) => {
         registration_number: bus.registration_number,
         capacity: bus.capacity,
         status: bus.status as 'active' | 'inactive' | 'maintenance',
-        assigned_route_id: bus.assigned_route_id || undefined,
+        route_id: bus.route_id || null,
       });
     } else {
       reset({
         registration_number: '',
         capacity: 50,
         status: 'inactive',
-        assigned_route_id: undefined,
+        route_id: null,
       });
     }
   }, [bus, reset]);
@@ -194,10 +194,10 @@ export const BusModal: React.FC<BusModalProps> = ({ open, onClose, bus }) => {
 
           {/* Assigned Route */}
           <div className="space-y-2">
-            <Label htmlFor="assigned_route_id">Assigned Route (Optional)</Label>
+            <Label htmlFor="route_id">Assigned Route (Optional)</Label>
             <Select
-              value={assignedRouteId || 'none'}
-              onValueChange={(value) => setValue('assigned_route_id', value === 'none' ? undefined : value)}
+              value={routeId ? String(routeId) : 'none'}
+              onValueChange={(value) => setValue('route_id', value === 'none' ? null : parseInt(value, 10))}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select route" />
@@ -205,7 +205,7 @@ export const BusModal: React.FC<BusModalProps> = ({ open, onClose, bus }) => {
               <SelectContent>
                 <SelectItem value="none">No Route</SelectItem>
                 {routes?.map((route) => (
-                  <SelectItem key={route.id} value={route.id}>
+                  <SelectItem key={route.id} value={String(route.id)}>
                     {route.name} ({route.code})
                   </SelectItem>
                 ))}

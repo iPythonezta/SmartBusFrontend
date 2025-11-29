@@ -35,7 +35,7 @@ export const MapboxMap: React.FC<MapboxMapProps> = ({
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
-  const busMarkers = useRef<Map<string, mapboxgl.Marker>>(new Map());
+  const busMarkers = useRef<Map<number | string, mapboxgl.Marker>>(new Map());
   const stopMarkers = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const [mapLoaded, setMapLoaded] = useState(false);
 
@@ -397,7 +397,7 @@ export const MapboxMap: React.FC<MapboxMapProps> = ({
       busMarkers.current.set(bus.id, marker);
 
       // Subscribe to real-time updates - this updates the marker WITHOUT re-rendering the component
-      const unsubscribe = realtimeService.subscribe(bus.id, (_busId, newLocation) => {
+      const unsubscribe = realtimeService.subscribe(String(bus.id), (_busId, newLocation) => {
         const existingMarker = busMarkers.current.get(bus.id);
         if (existingMarker) {
           // Update marker position smoothly
@@ -446,7 +446,7 @@ export const MapboxMap: React.FC<MapboxMapProps> = ({
       // Only remove markers for buses that are no longer in the list
       const currentBusIds = new Set(busesData.map(b => b.id));
       busMarkers.current.forEach((marker, busId) => {
-        if (!currentBusIds.has(busId)) {
+        if (!currentBusIds.has(busId as number)) {
           marker.remove();
           busMarkers.current.delete(busId);
         }

@@ -74,29 +74,55 @@ export interface CreateRouteInput {
 
 // Bus types
 export interface Bus {
-  id: string;
+  id: number;
   registration_number: string;
   capacity: number;
   status: 'active' | 'inactive' | 'maintenance';
-  assigned_route_id?: string;
-  assigned_route?: Route;
-  last_location?: BusLocation;
+  route_id: number | null;
+  route: BusRoute | null;
+  last_location: BusLocation | null;
+  next_stop?: NextStop | null;
   created_at: string;
   updated_at: string;
 }
 
+export interface BusRoute {
+  id: number;
+  name: string;
+  code: string;
+  color: string;
+  description?: string;
+  stops?: RouteStopInfo[];
+}
+
+export interface RouteStopInfo {
+  sequence: number;
+  stop_id: number;
+  stop_name: string;
+  latitude: number;
+  longitude: number;
+  distance_from_prev_meters: number;
+}
+
 export interface BusLocation {
-  id: string;
-  bus_id: string;
   latitude: number;
   longitude: number;
   speed: number;
   heading: number;
+  current_stop_sequence: number;
   timestamp: string;
 }
 
+export interface NextStop {
+  sequence: number;
+  stop_id: number;
+  stop_name: string;
+  distance_meters: number;
+  eta_minutes: number;
+}
+
 export interface BusETA {
-  stop_id: string;
+  stop_id: number;
   stop_name: string;
   distance_meters: number;
   eta_minutes: number;
@@ -105,9 +131,54 @@ export interface BusETA {
 
 export interface CreateBusInput {
   registration_number: string;
-  capacity: number;
+  capacity?: number;
   status?: 'active' | 'inactive' | 'maintenance';
-  assigned_route_id?: string;
+  route_id?: number | null;
+}
+
+export interface ActiveBus {
+  id: number;
+  registration_number: string;
+  route_id: number;
+  route_code: string;
+  route_color: string;
+  latitude: number;
+  longitude: number;
+  heading: number;
+  speed: number;
+  current_stop_sequence: number;
+  next_stop_name: string;
+}
+
+export interface BusTrip {
+  id: number;
+  route_id: number;
+  direction: 'outbound' | 'inbound';
+  start_time: string;
+  end_time?: string;
+  current_stop_sequence?: number;
+  status: 'in-progress' | 'completed' | 'cancelled';
+  total_duration_minutes?: number;
+}
+
+export interface StartTripInput {
+  route_id?: number;
+  direction?: 'outbound' | 'inbound';
+  start_stop_sequence?: number;
+}
+
+export interface StartTripResponse {
+  bus_id: number;
+  status: string;
+  trip: BusTrip;
+  message: string;
+}
+
+export interface EndTripResponse {
+  bus_id: number;
+  status: string;
+  trip: BusTrip;
+  message: string;
 }
 
 // Display Unit types
@@ -263,10 +334,15 @@ export interface ListQueryParams {
 export interface DashboardStats {
   total_buses: number;
   active_buses: number;
+  inactive_buses: number;
+  maintenance_buses: number;
   total_routes: number;
   total_stops: number;
   online_displays: number;
+  offline_displays: number;
+  error_displays: number;
   active_announcements: number;
+  active_ads: number;
 }
 
 // Audit log types

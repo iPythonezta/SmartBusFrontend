@@ -150,11 +150,11 @@ const BusesPage: React.FC = () => {
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
-                {bus.assigned_route ? (
+                {bus.route ? (
                   <div className="flex items-center gap-2 text-sm">
                     <Navigation className="h-4 w-4 text-teal-600" />
-                    <span className="font-medium">{bus.assigned_route.name}</span>
-                    <span className="text-muted-foreground">({bus.assigned_route.code})</span>
+                    <span className="font-medium">{bus.route.name}</span>
+                    <span className="text-muted-foreground">({bus.route.code})</span>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">

@@ -126,21 +126,19 @@ export const mockRoutes: Route[] = [
 // Mock Bus Locations
 export const mockBusLocations: BusLocation[] = [
   {
-    id: '1',
-    bus_id: '1',
     latitude: 33.7077,
     longitude: 73.0469,
     speed: 45,
     heading: 180,
+    current_stop_sequence: 2,
     timestamp: new Date().toISOString(),
   },
   {
-    id: '2',
-    bus_id: '2',
     latitude: 33.7184,
     longitude: 73.0630,
     speed: 35,
     heading: 90,
+    current_stop_sequence: 1,
     timestamp: new Date().toISOString(),
   },
 ];
@@ -148,32 +146,45 @@ export const mockBusLocations: BusLocation[] = [
 // Mock Buses
 export const mockBuses: Bus[] = [
   {
-    id: '1',
+    id: 1,
     registration_number: 'ISB-1234',
     capacity: 50,
     status: 'active',
-    assigned_route_id: '1',
-    assigned_route: mockRoutes[0],
+    route_id: 1,
+    route: {
+      id: 1,
+      name: mockRoutes[0].name,
+      code: mockRoutes[0].code,
+      color: mockRoutes[0].color || '#3B82F6',
+    },
     last_location: mockBusLocations[0],
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
   },
   {
-    id: '2',
+    id: 2,
     registration_number: 'ISB-5678',
     capacity: 45,
     status: 'active',
-    assigned_route_id: '2',
-    assigned_route: mockRoutes[1],
+    route_id: 2,
+    route: {
+      id: 2,
+      name: mockRoutes[1].name,
+      code: mockRoutes[1].code,
+      color: mockRoutes[1].color || '#22C55E',
+    },
     last_location: mockBusLocations[1],
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
   },
   {
-    id: '3',
+    id: 3,
     registration_number: 'ISB-9012',
     capacity: 50,
     status: 'inactive',
+    route_id: null,
+    route: null,
+    last_location: null,
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
   },
@@ -312,30 +323,35 @@ export const mockAnnouncements: Announcement[] = [
 export const mockDashboardStats: DashboardStats = {
   total_buses: 3,
   active_buses: 2,
+  inactive_buses: 1,
+  maintenance_buses: 0,
   total_routes: 2,
   total_stops: 6,
   online_displays: 2,
+  offline_displays: 1,
+  error_displays: 0,
   active_announcements: 2,
+  active_ads: 3,
 };
 
 // Mock ETAs
 export const mockETAs: BusETA[] = [
   {
-    stop_id: '1',
+    stop_id: 1,
     stop_name: 'Blue Area',
     distance_meters: 500,
     eta_minutes: 2,
     status: 'ontime',
   },
   {
-    stop_id: '3',
+    stop_id: 3,
     stop_name: 'Aabpara',
     distance_meters: 2000,
     eta_minutes: 8,
     status: 'ontime',
   },
   {
-    stop_id: '5',
+    stop_id: 5,
     stop_name: 'Zero Point',
     distance_meters: 4000,
     eta_minutes: 15,
@@ -439,15 +455,19 @@ export const mockApi = {
 
   getBus: async (id: string) => {
     await delay(300);
-    return mockBuses.find(b => b.id === id) || mockBuses[0];
+    const numId = parseInt(id, 10);
+    return mockBuses.find(b => b.id === numId) || mockBuses[0];
   },
 
   createBus: async (data: any) => {
     await delay(500);
     const newBus: Bus = {
-      id: String(mockBuses.length + 1),
+      id: mockBuses.length + 1,
       ...data,
       status: data.status || 'inactive',
+      route_id: data.route_id || null,
+      route: null,
+      last_location: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -507,7 +527,7 @@ export const mockApi = {
     }
   },
 
-  getDisplaySimulation: async (id: string) => {
+  getDisplaySimulation: async (_id: string) => {
     await delay(300);
     return mockDisplaySimulation;
   },

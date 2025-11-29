@@ -18,30 +18,32 @@ const BusDetailPage: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [liveLocation, setLiveLocation] = useState<BusLocation | null>(null);
   
+  const busId = id ? parseInt(id, 10) : undefined;
+  
   const { data: bus, isLoading } = useQuery({
-    queryKey: ['bus', id],
-    queryFn: () => busesApi.getBus(id!),
-    enabled: !!id,
+    queryKey: ['bus', busId],
+    queryFn: () => busesApi.getBus(busId!),
+    enabled: !!busId,
   });
 
   // Subscribe to real-time location updates
   useEffect(() => {
-    if (!bus || !id) return;
+    if (!bus || !busId) return;
 
-    const unsubscribe = realtimeService.subscribe(id, (_busId, location) => {
+    const unsubscribe = realtimeService.subscribe(String(busId), (_busId, location) => {
       setLiveLocation(location);
     });
 
     return () => {
       unsubscribe();
     };
-  }, [bus, id]);
+  }, [bus, busId]);
 
   // Use live location if available, otherwise use last known location
   const displayLocation = liveLocation || bus?.last_location;
 
   const deleteMutation = useMutation({
-    mutationFn: () => busesApi.deleteBus(id!),
+    mutationFn: () => busesApi.deleteBus(busId!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['buses'] });
       toast({
@@ -66,8 +68,8 @@ const BusDetailPage: React.FC = () => {
   };
 
   const handleViewRoute = () => {
-    if (bus?.assigned_route_id) {
-      navigate(`/routes/${bus.assigned_route_id}`);
+    if (bus?.route_id) {
+      navigate(`/routes/${bus.route_id}`);
     } else {
       toast({
         title: 'No Route Assigned',
@@ -164,10 +166,10 @@ const BusDetailPage: React.FC = () => {
             <CardTitle className="text-sm font-medium text-muted-foreground">Assigned Route</CardTitle>
           </CardHeader>
           <CardContent>
-            {bus.assigned_route ? (
+            {bus.route ? (
               <div>
-                <p className="text-lg font-bold">{bus.assigned_route.name}</p>
-                <p className="text-sm text-muted-foreground">{bus.assigned_route.code}</p>
+                <p className="text-lg font-bold">{bus.route.name}</p>
+                <p className="text-sm text-muted-foreground">{bus.route.code}</p>
               </div>
             ) : (
               <p className="text-muted-foreground">No route assigned</p>
@@ -213,11 +215,16 @@ const BusDetailPage: React.FC = () => {
                   zoom: 14,
                 }}
                 buses={bus.status === 'active' && bus.last_location ? [bus] : []}
-                stops={bus.assigned_route?.route_stops
-                  ?.filter(rs => rs.stop)
-                  .map(rs => rs.stop!) || []}
-                showRoute={!!bus.assigned_route?.route_stops && bus.assigned_route.route_stops.length > 1}
-                routeColor={bus.assigned_route?.color || '#0d9488'}
+                stops={bus.route?.stops?.map(s => ({
+                  id: String(s.stop_id),
+                  name: s.stop_name,
+                  latitude: s.latitude,
+                  longitude: s.longitude,
+                  created_at: '',
+                  updated_at: '',
+                })) || []}
+                showRoute={!!bus.route?.stops && bus.route.stops.length > 1}
+                routeColor={bus.route?.color || '#0d9488'}
                 height="100%"
                 interactive={true}
                 showControls={true}
