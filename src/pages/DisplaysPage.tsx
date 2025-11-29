@@ -1,24 +1,125 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { displaysApi } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Monitor, Plus, MapPin, Activity, Power, PowerOff } from 'lucide-react';
+import { Monitor, Plus, MapPin, Activity, Power, PowerOff, Pencil, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useToast } from '@/components/ui/use-toast';
+import DisplayModal from '@/components/modals/DisplayModal';
+import type { DisplayUnit } from '@/types';
 
 const DisplaysPage: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  // Modal state
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingDisplay, setEditingDisplay] = useState<DisplayUnit | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   
   const { data: displays, isLoading } = useQuery({
     queryKey: ['displays'],
     queryFn: () => displaysApi.getDisplays(),
   });
 
-  const onlineCount = displays?.filter(d => d.is_online).length || 0;
+  // Create mutation
+  const createMutation = useMutation({
+    mutationFn: (data: { name: string; stop_id: string; location?: string; status: 'online' | 'offline' }) =>
+      displaysApi.createDisplay(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['displays'] });
+      setIsModalOpen(false);
+      toast({
+        title: 'Display Added',
+        description: 'New display unit has been created successfully.',
+      });
+    },
+    onError: () => {
+      toast({
+        title: 'Error',
+        description: 'Failed to create display unit.',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<DisplayUnit> }) =>
+      displaysApi.updateDisplay(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['displays'] });
+      setIsModalOpen(false);
+      setEditingDisplay(null);
+      toast({
+        title: 'Display Updated',
+        description: 'Display unit has been updated successfully.',
+      });
+    },
+    onError: () => {
+      toast({
+        title: 'Error',
+        description: 'Failed to update display unit.',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => displaysApi.deleteDisplay(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['displays'] });
+      setDeleteConfirmId(null);
+      toast({
+        title: 'Display Deleted',
+        description: 'Display unit has been removed.',
+      });
+    },
+    onError: () => {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete display unit.',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const onlineCount = displays?.filter(d => d.status === 'online').length || 0;
   const offlineCount = (displays?.length || 0) - onlineCount;
+
+  const handleAddClick = () => {
+    setEditingDisplay(null);
+    setIsModalOpen(true);
+  };
+
+  const handleEditClick = (display: DisplayUnit) => {
+    setEditingDisplay(display);
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteClick = (id: string) => {
+    setDeleteConfirmId(id);
+  };
+
+  const confirmDelete = () => {
+    if (deleteConfirmId) {
+      deleteMutation.mutate(deleteConfirmId);
+    }
+  };
+
+  const handleModalSubmit = (data: { name: string; stop_id: string; location?: string; status: 'online' | 'offline' }) => {
+    if (editingDisplay) {
+      updateMutation.mutate({ id: editingDisplay.id, data });
+    } else {
+      createMutation.mutate(data);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -52,7 +153,7 @@ const DisplaysPage: React.FC = () => {
           <h1 className="text-3xl font-bold">{t('displays.title')}</h1>
           <p className="text-muted-foreground mt-1">Manage SMD display units</p>
         </div>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={handleAddClick}>
           <Plus className="h-4 w-4" />
           {t('displays.addDisplay')}
         </Button>
@@ -122,9 +223,9 @@ const DisplaysPage: React.FC = () => {
                     <div>
                       <CardTitle className="text-lg">{display.name}</CardTitle>
                       <div className="flex items-center gap-2 mt-1">
-                        <div className={`h-2 w-2 rounded-full ${display.is_online ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
-                        <span className={`text-xs font-medium ${display.is_online ? 'text-green-600' : 'text-gray-500'}`}>
-                          {display.is_online ? 'Online' : 'Offline'}
+                        <div className={`h-2 w-2 rounded-full ${display.status === 'online' ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
+                        <span className={`text-xs font-medium ${display.status === 'online' ? 'text-green-600' : 'text-gray-500'}`}>
+                          {display.status === 'online' ? 'Online' : 'Offline'}
                         </span>
                       </div>
                     </div>
@@ -135,38 +236,99 @@ const DisplaysPage: React.FC = () => {
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <MapPin className="h-4 w-4" />
-                    <span>{display.stop_name}</span>
+                    <span>{display.stop?.name || 'Unknown Stop'}</span>
                   </div>
                   
-                  {display.is_online && display.last_heartbeat && (
+                  {display.location && (
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Activity className="h-4 w-4" />
-                      <span className="text-xs">
-                        Last seen: {new Date(display.last_heartbeat).toLocaleString()}
-                      </span>
+                      <span className="text-xs">{display.location}</span>
                     </div>
                   )}
                 </div>
 
-                <div className="flex gap-2 pt-2">
-                  <Button 
-                    variant="default" 
-                    size="sm" 
-                    className="flex-1"
-                    onClick={() => navigate(`/smd-simulator/${display.id}`)}
-                  >
-                    <Monitor className="h-4 w-4 mr-1" />
-                    Open Simulator
-                  </Button>
-                  <Button variant="outline" size="sm">
-                    Edit
-                  </Button>
-                </div>
+                {/* Delete Confirmation */}
+                {deleteConfirmId === display.id ? (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-2">
+                    <p className="text-sm text-red-700">Are you sure you want to delete this display?</p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={confirmDelete}
+                        disabled={deleteMutation.isPending}
+                      >
+                        {deleteMutation.isPending ? 'Deleting...' : 'Yes, Delete'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setDeleteConfirmId(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-2 pt-2">
+                    <Button 
+                      variant="default" 
+                      size="sm" 
+                      className="flex-1"
+                      onClick={() => navigate(`/smd-simulator/${display.id}`)}
+                    >
+                      <Monitor className="h-4 w-4 mr-1" />
+                      Simulate
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEditClick(display)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      onClick={() => handleDeleteClick(display.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </motion.div>
         ))}
       </div>
+
+      {/* Empty State */}
+      {displays?.length === 0 && (
+        <Card className="p-12">
+          <div className="text-center">
+            <Monitor className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No Display Units</h3>
+            <p className="text-gray-500 mb-4">Get started by adding your first SMD display unit.</p>
+            <Button onClick={handleAddClick}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Display
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Display Modal */}
+      <DisplayModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingDisplay(null);
+        }}
+        onSubmit={handleModalSubmit}
+        display={editingDisplay}
+        isLoading={createMutation.isPending || updateMutation.isPending}
+      />
     </div>
   );
 };

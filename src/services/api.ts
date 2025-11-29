@@ -84,11 +84,9 @@ export const busesApi = {
 export const displaysApi = {
   getDisplays: (params?: ListQueryParams) => mockApi.getDisplays(),
   getDisplay: (id: string) => mockApi.getDisplay(id),
-  createDisplay: (data: CreateDisplayInput) =>
-    Promise.resolve({ id: '4', status: 'online', ...data, created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as DisplayUnit),
-  updateDisplay: (id: string, data: Partial<DisplayUnit>) =>
-    Promise.resolve({ id, ...data } as DisplayUnit),
-  deleteDisplay: (id: string) => Promise.resolve(),
+  createDisplay: (data: CreateDisplayInput & { status: 'online' | 'offline' }) => mockApi.createDisplay(data),
+  updateDisplay: (id: string, data: Partial<DisplayUnit>) => mockApi.updateDisplay(id, data),
+  deleteDisplay: (id: string) => mockApi.deleteDisplay(id),
   getDisplaySimulation: (id: string) => mockApi.getDisplaySimulation(id),
   getDisplayContent: (id: string) => Promise.resolve({ ads: [], announcements: [] }),
 };

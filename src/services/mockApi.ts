@@ -180,7 +180,7 @@ export const mockBuses: Bus[] = [
 ];
 
 // Mock Display Units
-export const mockDisplays: DisplayUnit[] = [
+export let mockDisplays: DisplayUnit[] = [
   {
     id: '1',
     name: 'Blue Area Display',
@@ -446,6 +446,47 @@ export const mockApi = {
   getDisplay: async (id: string) => {
     await delay(300);
     return mockDisplays.find(d => d.id === id) || mockDisplays[0];
+  },
+
+  createDisplay: async (data: { name: string; stop_id: string; location?: string; status: 'online' | 'offline' }) => {
+    await delay(500);
+    const stop = mockStops.find(s => s.id === data.stop_id);
+    const newDisplay: DisplayUnit = {
+      id: String(mockDisplays.length + 1 + Date.now()),
+      name: data.name,
+      stop_id: data.stop_id,
+      stop: stop,
+      status: data.status,
+      location: data.location,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    mockDisplays.push(newDisplay);
+    return newDisplay;
+  },
+
+  updateDisplay: async (id: string, data: Partial<DisplayUnit>) => {
+    await delay(500);
+    const index = mockDisplays.findIndex(d => d.id === id);
+    if (index !== -1) {
+      const stop = data.stop_id ? mockStops.find(s => s.id === data.stop_id) : mockDisplays[index].stop;
+      mockDisplays[index] = {
+        ...mockDisplays[index],
+        ...data,
+        stop: stop,
+        updated_at: new Date().toISOString(),
+      };
+      return mockDisplays[index];
+    }
+    throw new Error('Display not found');
+  },
+
+  deleteDisplay: async (id: string) => {
+    await delay(500);
+    const index = mockDisplays.findIndex(d => d.id === id);
+    if (index !== -1) {
+      mockDisplays.splice(index, 1);
+    }
   },
 
   getDisplaySimulation: async (id: string) => {

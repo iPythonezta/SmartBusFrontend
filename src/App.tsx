@@ -38,6 +38,7 @@ function App() {
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/smd-simulator" element={<SMDSimulatorPage />} />
         <Route path="/smd-simulator/:displayId" element={<SMDSimulatorPage />} />
         
         <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
