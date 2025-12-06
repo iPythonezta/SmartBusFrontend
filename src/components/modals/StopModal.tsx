@@ -85,7 +85,7 @@ export const StopModal: React.FC<StopModalProps> = ({ open, onClose, stop, mode 
   const [showResults, setShowResults] = useState(false);
   const searchTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Debounced search function
+  // Debounced search function using OpenStreetMap Nominatim API
   const handleSearchChange = useCallback((query: string) => {
     setSearchQuery(query);
     console.log('[StopModal] Search query:', query);
@@ -106,15 +106,13 @@ export const StopModal: React.FC<StopModalProps> = ({ open, onClose, stop, mode 
       setIsSearching(true);
       console.log('[StopModal] Searching for:', query);
       try {
-        // Use OpenStreetMap Nominatim API - better coverage for Pakistan
+        // Use OpenStreetMap Nominatim API
         const url = `https://nominatim.openstreetmap.org/search?` +
-          `q=${encodeURIComponent(query + ', Islamabad, Pakistan')}&` +
+          `q=${encodeURIComponent(query)}&` +
           `format=json&` +
           `addressdetails=1&` +
           `limit=8&` +
-          `countrycodes=pk&` +
-          `viewbox=72.8,33.4,73.5,34.0&` + // Islamabad region
-          `bounded=0`; // Don't strictly bound, just prefer this area
+          `countrycodes=pk`;
         
         console.log('[StopModal] Nominatim URL:', url);
         
@@ -125,7 +123,6 @@ export const StopModal: React.FC<StopModalProps> = ({ open, onClose, stop, mode 
         });
         const data = await response.json();
         console.log('[StopModal] Search results:', data?.length || 0, 'features');
-        console.log('[StopModal] Results data:', data);
         
         // Transform Nominatim results to match our expected format
         const transformedResults: GeocodingFeature[] = (data || []).map((item: {
@@ -134,7 +131,6 @@ export const StopModal: React.FC<StopModalProps> = ({ open, onClose, stop, mode 
           lon: string;
           lat: string;
           name?: string;
-          type?: string;
         }) => ({
           id: String(item.place_id),
           place_name: item.display_name,
@@ -154,7 +150,7 @@ export const StopModal: React.FC<StopModalProps> = ({ open, onClose, stop, mode 
       } finally {
         setIsSearching(false);
       }
-    }, 500); // Slightly longer debounce for Nominatim rate limits
+    }, 500); // Debounce for Nominatim rate limits
   }, []);
 
   // Handle selecting a search result

@@ -143,7 +143,7 @@ const SettingsPage: React.FC = () => {
               placeholder="http://localhost:8000/api"
             />
             <p className="text-xs text-muted-foreground">
-              Currently using <span className="font-mono bg-yellow-100 px-1 rounded">mock data</span> for demo
+              Backend API endpoint for all data operations
             </p>
           </div>
           
@@ -163,18 +163,18 @@ const SettingsPage: React.FC = () => {
         </CardContent>
       </Card>
 
-      <Card className="border-orange-200 bg-orange-50/50">
+      <Card className="border-blue-200 bg-blue-50/50">
         <CardHeader>
-          <CardTitle className="text-orange-700">About This Demo</CardTitle>
+          <CardTitle className="text-blue-700">About This Application</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm text-orange-900">
+        <CardContent className="space-y-2 text-sm text-blue-900">
           <p>
-            <strong>Smart Bus Islamabad Management Dashboard</strong> - Phase 1
+            <strong>Smart Bus Islamabad Management Dashboard</strong>
           </p>
           <p>
-            This is a demonstration frontend using mock data. All changes are simulated and won't persist.
+            Full-featured admin dashboard for managing the Smart Bus Islamabad transit system.
           </p>
-          <p className="pt-2 border-t border-orange-200">
+          <p className="pt-2 border-t border-blue-200">
             Built with: React 19 • TypeScript • Vite • Tailwind CSS • React Query • Framer Motion
           </p>
         </CardContent>

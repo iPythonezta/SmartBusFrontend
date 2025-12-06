@@ -22,7 +22,7 @@ const BusDetailPage: React.FC = () => {
     queryFn: () => busesApi.getBus(busId!),
     enabled: !!busId,
     // Refetch every 3 seconds to get latest location from backend
-    refetchInterval: 3000,
+    refetchInterval: 300,
   });
 
   // Only use location data from the backend - no simulation

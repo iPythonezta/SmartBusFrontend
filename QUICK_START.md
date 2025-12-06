@@ -27,10 +27,8 @@ npm run dev
 
 App runs at: `http://localhost:5173`
 
-### 4. Login (Mock Credentials)
-Until your backend is running, the app expects:
-- **Email**: admin@smartbus.pk
-- **Password**: admin123
+### 4. Login
+Use your backend credentials to log in.
 
 ## 📋 Quick Tour
 

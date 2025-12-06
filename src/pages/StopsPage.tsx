@@ -1,27 +1,47 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { stopsApi } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, MapPin, Search, Navigation, X } from 'lucide-react';
+import { Plus, MapPin, Search, Navigation, X, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { StopModal } from '@/components/modals/StopModal';
 import { MapboxMap } from '@/components/map/MapboxMap';
+import { useToast } from '@/components/ui/use-toast';
 import type { Stop } from '@/types';
 
 const StopsPage: React.FC = () => {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedStop, setSelectedStop] = useState<Stop | undefined>();
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
   const [viewingStop, setViewingStop] = useState<Stop | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   
   const { data: stops, isLoading } = useQuery({
     queryKey: ['stops'],
     queryFn: () => stopsApi.getStops(),
+  });
+
+  const deleteStopMutation = useMutation({
+    mutationFn: (id: number) => stopsApi.deleteStop(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stops'] });
+      setDeleteConfirmId(null);
+      toast({ title: 'Stop Deleted', description: 'Bus stop has been removed.' });
+    },
+    onError: (error: Error) => {
+      const message = error.message?.includes('400') 
+        ? 'Cannot delete stop that is assigned to routes. Remove it from routes first.'
+        : 'Failed to delete stop.';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
+      setDeleteConfirmId(null);
+    },
   });
 
   const filteredStops = stops?.filter((stop) =>
@@ -160,7 +180,39 @@ const StopsPage: React.FC = () => {
                   >
                     Edit
                   </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    onClick={() => setDeleteConfirmId(stop.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
+
+                {/* Delete Confirmation */}
+                {deleteConfirmId === stop.id && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-2">
+                    <p className="text-sm text-red-700">Delete this stop?</p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => deleteStopMutation.mutate(stop.id)}
+                        disabled={deleteStopMutation.isPending}
+                      >
+                        {deleteStopMutation.isPending ? 'Deleting...' : 'Yes, Delete'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setDeleteConfirmId(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </motion.div>

@@ -60,7 +60,7 @@ src/
 
 ## 🔑 Environment Variables
 
-Create `.env` file (optional - most features work with demo data):
+Create `.env` file:
 
 ```env
 VITE_API_URL=http://localhost:8000/api
@@ -148,8 +148,6 @@ const newStop = await stopsApi.createStop({
 // Update
 await busesApi.assignRoute(busId, routeId);
 ```
-
-Currently uses **mock data** (see `src/services/mockApi.ts`) until backend is ready.
 
 ## 🧪 Testing
 

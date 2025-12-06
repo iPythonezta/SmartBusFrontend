@@ -96,8 +96,8 @@ src/
 │   └── QueryProvider.tsx               # TanStack Query provider
 ├── services/
 │   ├── api.ts                          # API service layer (typed)
-│   ├── mockApi.ts                      # Mock data for demo
-│   └── realtime.ts                     # Realtime update service (SSE/polling)
+│   ├── realtime.ts                     # Realtime service placeholder
+│   └── routing.ts                      # Mapbox routing service
 ├── store/
 │   └── index.ts                        # Zustand stores (UI, Toast, SMD)
 ├── types/
@@ -184,22 +184,21 @@ src/
 - Date/number formatting with Intl API
 - Dynamic language switching
 
-### 12. Real-time Updates (Mock)
-- Simulated live bus position updates
-- ETA recalculation
-- Polling every 8-10 seconds for SMD simulator
-- WebSocket/SSE stub for future implementation
+### 12. Real-time Updates
+- Live bus position updates via API polling
+- ETA calculation handled by backend
+- Periodic polling for data refresh
+- GPS Simulator for testing bus movements
 
 ## Map Integration
 
-### MapCanvas Component
-- Wrapper around `react-leaflet`
+### MapboxMap Component
+- Mapbox GL JS based map component
 - Features:
   - Interactive click-to-place markers
   - Draggable markers for position adjustment
-  - Route polyline visualization with glow effect
-  - Animated bus markers with pulse effect
-  - Speed indicators for buses
+  - Route visualization with Mapbox Directions API
+  - Bus markers with status indicators
   - Custom marker styling and labels
   - Navigation and geolocation controls
 
@@ -207,7 +206,7 @@ src/
 
 #### Adding a Stop
 ```tsx
-<MapCanvas
+<MapboxMap
   initialViewState={{ longitude: 73.0479, latitude: 33.6844, zoom: 13 }}
   markers={[{ id: 'new-stop', longitude, latitude, color: '#14b8a6', label: 'New Stop' }]}
   onClick={(lng, lat) => handleMapClick(lng, lat)}
@@ -233,28 +232,20 @@ src/
 
 #### Live Bus Tracking
 ```tsx
-<MapCanvas
+<MapboxMap
   buses={activeBuses}
-  routePolyline={currentRoute}
+  routePath={currentRoute}
   initialViewState={{ longitude, latitude, zoom: 14 }}
 />
 ```
 
-## Mock API & Data
+## API Integration
 
-All API calls currently use mock data from `services/mockApi.ts`:
-- Pre-populated buses, routes, stops, displays
-- Realistic Islamabad coordinates
-- Simulated ETAs and live locations
-- 500ms delay to simulate network latency
-
-### Mock Data Includes:
-- 3 buses (2 active, 1 inactive)
-- 2 routes (Blue Line, Green Line)
-- 6 stops (Blue Area, Secretariat, Aabpara, Melody, Zero Point, Faizabad)
-- 3 display units
-- 2 advertisements
-- 2 announcements
+All API calls use the backend API:
+- Real bus, route, stop, and display data
+- GPS Simulator sends location updates
+- Backend handles ETA calculations
+- SMD Simulator fetches real announcements and ads
 
 ## Environment Variables
 
@@ -263,9 +254,10 @@ Create `.env` file:
 VITE_API_URL=http://localhost:8000/api
 VITE_I18N_DEFAULT=en
 VITE_WS_URL=ws://localhost:8000
+VITE_MAPBOX_API_KEY=your_mapbox_access_token
 ```
 
-**Note:** No API keys required! We use OpenStreetMap with Leaflet, which is completely free.
+**Note:** Mapbox access token required for map features.
 
 ## Running the Project
 

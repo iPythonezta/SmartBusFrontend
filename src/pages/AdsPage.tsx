@@ -36,6 +36,7 @@ const AdsPage: React.FC = () => {
   const [editingSchedule, setEditingSchedule] = useState<AdSchedule | null>(null);
   const [schedulingAdId, setSchedulingAdId] = useState<number | undefined>(undefined);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [deleteScheduleConfirmId, setDeleteScheduleConfirmId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   
   const { data: ads, isLoading: adsLoading } = useQuery({
@@ -125,6 +126,18 @@ const AdsPage: React.FC = () => {
     },
     onError: () => {
       toast({ title: 'Error', description: 'Failed to update schedule.', variant: 'destructive' });
+    },
+  });
+
+  const deleteScheduleMutation = useMutation({
+    mutationFn: (id: number) => adsApi.deleteSchedule(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ad-schedules'] });
+      setDeleteScheduleConfirmId(null);
+      toast({ title: 'Schedule Deleted', description: 'Ad schedule has been removed.' });
+    },
+    onError: () => {
+      toast({ title: 'Error', description: 'Failed to delete schedule.', variant: 'destructive' });
     },
   });
 
@@ -262,6 +275,96 @@ const AdsPage: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Ad Schedules Section */}
+      {schedules && schedules.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Ad Schedules
+              </CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {schedules.map((schedule) => {
+                const ad = ads?.find(a => a.id === schedule.ad_id);
+                const isActive = isScheduleActive(schedule.start_time, schedule.end_time);
+                
+                return (
+                  <div
+                    key={schedule.id}
+                    className={`flex items-center justify-between p-3 rounded-lg border ${
+                      isActive ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`h-2 w-2 rounded-full ${isActive ? 'bg-green-500' : 'bg-gray-400'}`} />
+                      <div>
+                        <p className="font-medium text-sm">{ad?.title || 'Unknown Ad'}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(schedule.start_time).toLocaleString()} - {new Date(schedule.end_time).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs px-2 py-1 rounded ${
+                        isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        Priority: {schedule.priority}
+                      </span>
+                      
+                      {deleteScheduleConfirmId === schedule.id ? (
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => deleteScheduleMutation.mutate(schedule.id)}
+                            disabled={deleteScheduleMutation.isPending}
+                          >
+                            {deleteScheduleMutation.isPending ? '...' : 'Yes'}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setDeleteScheduleConfirmId(null)}
+                          >
+                            No
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setEditingSchedule(schedule);
+                              setSchedulingAdId(undefined);
+                              setIsScheduleModalOpen(true);
+                            }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => setDeleteScheduleConfirmId(schedule.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredAds?.map((ad, index) => {
