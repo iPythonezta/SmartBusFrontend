@@ -137,6 +137,7 @@ const GPSSimulatorPage = () => {
   const [params, setParams] = useState({
     speedKmh: 40,
     updateIntervalMs: 1000, // Update every 1 second
+    speedMultiplier: 10, // Multiply speed for faster testing (1x = realistic, 10x = fast)
   });
   const paramsRef = useRef(params);
 
@@ -328,8 +329,9 @@ const GPSSimulatorPage = () => {
     try {
       // Calculate distance traveled in this tick based on speed
       // speed is in km/h, interval is in ms
-      // distance = speed * time = (km/h) * (ms / 3600000) * 1000m = speed * interval / 3600 meters
-      const metersPerTick = (paramsRef.current.speedKmh * paramsRef.current.updateIntervalMs) / 3600;
+      // distance = speed * time = (km/h) * (h/3600000) * 1000m = speed * interval / 3.6 meters
+      // Apply speed multiplier for faster testing
+      const metersPerTick = (paramsRef.current.speedKmh * paramsRef.current.updateIntervalMs * paramsRef.current.speedMultiplier) / 3600;
 
       let { distanceTraveled } = currentSim;
       
@@ -760,6 +762,21 @@ const GPSSimulatorPage = () => {
                 min={1}
                 max={120}
               />
+            </div>
+            <div>
+              <Label className="text-xs">Speed Multiplier</Label>
+              <Input
+                type="number"
+                value={params.speedMultiplier}
+                onChange={(e) => setParams(p => ({ ...p, speedMultiplier: Number(e.target.value) }))}
+                className="h-9"
+                min={1}
+                max={100}
+                step={1}
+              />
+              <span className="text-xs text-muted-foreground">
+                {params.speedKmh * params.speedMultiplier} km/h effective
+              </span>
             </div>
             <div>
               <Label className="text-xs">Update Interval (ms)</Label>

@@ -153,7 +153,7 @@ const ROUTE_SLIDE_DURATION = 10; // seconds
 const ANNOUNCEMENT_SLIDE_DURATION = 8; // seconds
 const MAX_AD_DURATION = 30; // seconds
 const AD_BUDGET_PER_CYCLE = 60; // Total seconds for ads per cycle
-const REFRESH_INTERVAL = 30000; // Refresh data every 30 seconds
+const REFRESH_INTERVAL = 5000; // Refresh data every 5 seconds for live ETA updates
 
 // =============================================================================
 // MAIN COMPONENT
@@ -173,8 +173,8 @@ const SMDSimulatorPage: React.FC = () => {
     queryKey: ['displayContent', numericDisplayId],
     queryFn: () => displaysApi.getDisplayContent(numericDisplayId!),
     enabled: !!numericDisplayId,
-    refetchInterval: REFRESH_INTERVAL, // Auto-refresh every 30 seconds
-    staleTime: 10000, // Consider data stale after 10 seconds
+    refetchInterval: REFRESH_INTERVAL, // Auto-refresh every 5 seconds
+    staleTime: 2000, // Consider data stale after 2 seconds
   });
 
   // State
