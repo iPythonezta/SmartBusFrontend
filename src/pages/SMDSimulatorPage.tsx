@@ -641,12 +641,14 @@ const SMDSimulatorPage: React.FC = () => {
       if (ad.media_type === 'youtube') {
         const videoId = getYouTubeVideoId(ad.content_url);
         if (videoId) {
+          // Simple, reliable YouTube embed
           return (
             <iframe
-              key={`youtube-${videoId}-${isMuted ? 'muted' : 'unmuted'}`}
-              src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=${isMuted ? 1 : 0}&controls=0&showinfo=0&rel=0&modestbranding=1&loop=1&playlist=${videoId}`}
+              key={`youtube-${videoId}`}
+              src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&controls=0&loop=1&playlist=${videoId}`}
               className="w-full h-full"
-              allow="autoplay; encrypted-media"
+              allow="autoplay; encrypted-media; compute-pressure"
+              referrerPolicy="strict-origin-when-cross-origin"
               allowFullScreen
               title={ad.title}
               style={{ border: 'none' }}

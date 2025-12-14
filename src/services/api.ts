@@ -189,6 +189,22 @@ export const adsApi = {
   deleteSchedule: (id: number) => apiClient.delete<void>(`/ad-schedules/${id}/`),
 };
 
+// Advertisers API - Real API (added for 3NF migration)
+export const advertisersApi = {
+  getAdvertisers: async (params?: { search?: string }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.search) searchParams.append('search', params.search);
+    const queryString = searchParams.toString();
+    return apiClient.get(`/advertisers/${queryString ? `?${queryString}` : ''}`);
+  },
+  getAdvertiser: (id: number) => apiClient.get(`/advertisers/${id}/`),
+  createAdvertiser: (data: { advertiser_name: string; contact_phone?: string; contact_email?: string; address?: string }) =>
+    apiClient.post('/advertisers/', data),
+  updateAdvertiser: (id: number, data: Partial<{ advertiser_name: string; contact_phone?: string; contact_email?: string; address?: string }>) =>
+    apiClient.patch(`/advertisers/${id}/`, data),
+  deleteAdvertiser: (id: number) => apiClient.delete(`/advertisers/${id}/`),
+};
+
 // Announcements API - Real API
 export const announcementsApi = {
   getAnnouncements: async (params?: { search?: string; severity?: string; active?: boolean; route_id?: number }) => {

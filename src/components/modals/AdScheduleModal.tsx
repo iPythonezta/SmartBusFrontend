@@ -44,6 +44,7 @@ interface AdScheduleModalProps {
   schedule?: AdSchedule | null;
   preselectedAdId?: number;
   isLoading?: boolean;
+  readOnly?: boolean;
 }
 
 const AdScheduleModal: React.FC<AdScheduleModalProps> = ({
@@ -54,6 +55,7 @@ const AdScheduleModal: React.FC<AdScheduleModalProps> = ({
   schedule,
   preselectedAdId,
   isLoading,
+  readOnly = false,
 }) => {
   const isEditing = !!schedule;
   const [selectedDisplayIds, setSelectedDisplayIds] = useState<string[]>([]);
@@ -159,7 +161,7 @@ const AdScheduleModal: React.FC<AdScheduleModalProps> = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
-            {isEditing ? 'Edit Schedule' : 'Schedule Advertisement'}
+            {readOnly ? 'View Schedule Details' : isEditing ? 'Edit Schedule' : 'Schedule Advertisement'}
           </DialogTitle>
         </DialogHeader>
 
@@ -170,6 +172,7 @@ const AdScheduleModal: React.FC<AdScheduleModalProps> = ({
             <Select
               value={watchedAdId}
               onValueChange={(value) => setValue('ad_id', value)}
+              disabled={readOnly}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select an ad" />
@@ -203,23 +206,25 @@ const AdScheduleModal: React.FC<AdScheduleModalProps> = ({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label>Display Units *</Label>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={selectAllDisplays}
-                  className="text-xs text-blue-600 hover:underline"
-                >
-                  Select All
-                </button>
-                <span className="text-gray-300">|</span>
-                <button
-                  type="button"
-                  onClick={clearAllDisplays}
+              {!readOnly && (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={selectAllDisplays}
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    Select All
+                  </button>
+                  <span className="text-gray-300">|</span>
+                  <button
+                    type="button"
+                    onClick={clearAllDisplays}
                   className="text-xs text-gray-500 hover:underline"
                 >
                   Clear
                 </button>
-              </div>
+                </div>
+              )}
             </div>
             <div className="border rounded-lg max-h-40 overflow-y-auto">
               {displays?.map((display: DisplayUnit) => {
@@ -228,8 +233,8 @@ const AdScheduleModal: React.FC<AdScheduleModalProps> = ({
                 return (
                   <div
                     key={display.id}
-                    onClick={() => toggleDisplay(displayIdStr)}
-                    className={`flex items-center gap-3 p-2 cursor-pointer hover:bg-gray-50 border-b last:border-b-0 ${
+                    onClick={readOnly ? undefined : () => toggleDisplay(displayIdStr)}
+                    className={`flex items-center gap-3 p-2 ${readOnly ? '' : 'cursor-pointer hover:bg-gray-50'} border-b last:border-b-0 ${
                       isSelected ? 'bg-blue-50' : ''
                     }`}
                   >
@@ -265,6 +270,7 @@ const AdScheduleModal: React.FC<AdScheduleModalProps> = ({
               <Input
                 id="start_time"
                 type="datetime-local"
+                disabled={readOnly}
                 {...register('start_time')}
               />
               {errors.start_time && (
@@ -276,6 +282,7 @@ const AdScheduleModal: React.FC<AdScheduleModalProps> = ({
               <Input
                 id="end_time"
                 type="datetime-local"
+                disabled={readOnly}
                 {...register('end_time')}
               />
               {errors.end_time && (
@@ -292,6 +299,7 @@ const AdScheduleModal: React.FC<AdScheduleModalProps> = ({
               type="number"
               min={1}
               max={10}
+              disabled={readOnly}
               {...register('priority', { valueAsNumber: true })}
             />
             {errors.priority && (
@@ -305,11 +313,13 @@ const AdScheduleModal: React.FC<AdScheduleModalProps> = ({
           {/* Actions */}
           <div className="flex justify-end gap-3 pt-4 border-t">
             <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
+              {readOnly ? 'Close' : 'Cancel'}
             </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? 'Saving...' : isEditing ? 'Update Schedule' : 'Create Schedule'}
-            </Button>
+            {!readOnly && (
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? 'Saving...' : isEditing ? 'Update Schedule' : 'Create Schedule'}
+              </Button>
+            )}
           </div>
         </form>
       </DialogContent>

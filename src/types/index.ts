@@ -239,6 +239,8 @@ export interface DisplayAnnouncement {
   severity: 'info' | 'warning' | 'emergency';
 }
 
+import type { Advertiser } from './advertiser';
+
 export interface DisplayAdvertisement {
   id: number;
   title: string;
@@ -246,6 +248,7 @@ export interface DisplayAdvertisement {
   media_type: 'image' | 'youtube';
   duration_seconds: number;
   priority: number;
+  advertiser?: Advertiser; // optional in display responses
 }
 
 export interface DisplayContent {
@@ -324,8 +327,7 @@ export interface Advertisement {
   content_url: string;
   media_type: 'image' | 'youtube';
   duration_seconds: number;
-  advertiser_name: string;
-  advertiser_contact?: string;
+  advertiser: Advertiser; // nested advertiser object (3NF)
   metadata?: Record<string, any>;
   created_at: string;
   updated_at: string;
@@ -353,8 +355,7 @@ export interface CreateAdInput {
   content_url: string;
   media_type: 'image' | 'youtube';
   duration_seconds: number;
-  advertiser_name: string;
-  advertiser_contact?: string;
+  advertiser_id: number; // now required
   metadata?: Record<string, any>;
 }
 

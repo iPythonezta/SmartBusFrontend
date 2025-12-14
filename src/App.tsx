@@ -16,6 +16,7 @@ import StopsPage from './pages/StopsPage';
 import DisplaysPage from './pages/DisplaysPage';
 import SMDSimulatorPage from './pages/SMDSimulatorPage';
 import AdsPage from './pages/AdsPage';
+import AdvertisersPage from './pages/AdvertisersPage';
 import AnnouncementsPage from './pages/AnnouncementsPage';
 import UsersPage from './pages/UsersPage';
 import SettingsPage from './pages/SettingsPage';
@@ -52,6 +53,7 @@ function App() {
           <Route path="/stops" element={<StopsPage />} />
           <Route path="/display-units" element={<DisplaysPage />} />
           <Route path="/ads" element={<AdsPage />} />
+          <Route path="/advertisers" element={<AdvertisersPage />} />
           <Route path="/announcements" element={<AnnouncementsPage />} />
           <Route path="/gps-simulator" element={<GPSSimulatorPage />} />
           <Route path="/users" element={<ProtectedRoute requireAdmin><UsersPage /></ProtectedRoute>} />

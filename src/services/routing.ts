@@ -1,5 +1,5 @@
 // Routing service to get actual road-based routes between points
-// Uses OSRM (Open Source Routing Machine) - completely free, no API key needed
+// Uses Mapbox Directions API for better coverage worldwide
 
 interface RouteResponse {
   coordinates: [number, number][]; // [lng, lat] pairs
@@ -9,7 +9,7 @@ interface RouteResponse {
 
 class RoutingService {
   private cache: Map<string, [number, number][]> = new Map();
-  private readonly OSRM_URL = 'https://router.project-osrm.org/route/v1/driving';
+  private readonly MAPBOX_DIRECTIONS_URL = 'https://api.mapbox.com/directions/v5/mapbox/driving';
 
   /**
    * Get the actual road route between multiple points
@@ -26,35 +26,45 @@ class RoutingService {
     
     // Check cache first
     if (this.cache.has(cacheKey)) {
+      console.log('[RoutingService] Using cached route');
       return this.cache.get(cacheKey)!;
     }
 
     try {
-      // OSRM expects coordinates as lng,lat (opposite of Leaflet)
+      const accessToken = import.meta.env.VITE_MAPBOX_API_KEY;
+      if (!accessToken) {
+        console.warn('[RoutingService] No Mapbox API key, using straight lines');
+        return points;
+      }
+
+      // Mapbox expects coordinates as lng,lat
       const coordinates = points.map(p => `${p[1]},${p[0]}`).join(';');
       
       // Request route with full geometry
-      const url = `${this.OSRM_URL}/${coordinates}?overview=full&geometries=geojson`;
+      const url = `${this.MAPBOX_DIRECTIONS_URL}/${coordinates}?geometries=geojson&overview=full&access_token=${accessToken}`;
       
+      console.log('[RoutingService] Fetching route from Mapbox...');
       const response = await fetch(url);
       const data = await response.json();
 
       if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
-        // OSRM returns coordinates as [lng, lat], convert to [lat, lng] for Leaflet
+        // Mapbox returns coordinates as [lng, lat], convert to [lat, lng]
         const routeCoordinates: [number, number][] = data.routes[0].geometry.coordinates.map(
           (coord: number[]) => [coord[1], coord[0]] as [number, number]
         );
+
+        console.log(`[RoutingService] Got route with ${routeCoordinates.length} points`);
 
         // Cache the result
         this.cache.set(cacheKey, routeCoordinates);
         
         return routeCoordinates;
       } else {
-        console.warn('OSRM routing failed, falling back to straight lines:', data);
+        console.warn('[RoutingService] Mapbox routing failed, falling back to straight lines:', data);
         return points;
       }
     } catch (error) {
-      console.error('Error fetching route from OSRM:', error);
+      console.error('[RoutingService] Error fetching route from Mapbox:', error);
       // Fallback to straight lines if routing fails
       return points;
     }
@@ -80,8 +90,14 @@ class RoutingService {
     }
 
     try {
+      const accessToken = import.meta.env.VITE_MAPBOX_API_KEY;
+      if (!accessToken) {
+        console.warn('[RoutingService] No Mapbox API key');
+        return { coordinates: points, distance: 0, duration: 0 };
+      }
+
       const coordinates = points.map(p => `${p[1]},${p[0]}`).join(';');
-      const url = `${this.OSRM_URL}/${coordinates}?overview=full&geometries=geojson`;
+      const url = `${this.MAPBOX_DIRECTIONS_URL}/${coordinates}?geometries=geojson&overview=full&access_token=${accessToken}`;
       
       const response = await fetch(url);
       const data = await response.json();
@@ -99,7 +115,7 @@ class RoutingService {
         };
       }
     } catch (error) {
-      console.error('Error fetching route info from OSRM:', error);
+      console.error('[RoutingService] Error fetching route info from Mapbox:', error);
     }
 
     return {

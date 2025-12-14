@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Image, Youtube, ExternalLink, Building2 } from 'lucide-react';
 import type { Advertisement } from '@/types';
+import { advertisersApi } from '@/services/api';
 
 // Helper to extract YouTube video ID
 const getYouTubeVideoId = (url: string): string | null => {
@@ -32,8 +33,7 @@ const adSchema = z.object({
   media_type: z.enum(['image', 'youtube']),
   content_url: z.string().min(1, 'Content URL is required'),
   duration_seconds: z.number().min(1, 'Duration must be at least 1 second').max(60, 'Duration cannot exceed 60 seconds'),
-  advertiser_name: z.string().min(1, 'Advertiser name is required'),
-  advertiser_contact: z.string().optional(),
+  advertiser_id: z.number().min(1, 'Advertiser is required'),
 });
 
 type AdFormData = z.infer<typeof adSchema>;
@@ -55,6 +55,7 @@ const AdModal: React.FC<AdModalProps> = ({
 }) => {
   const isEditing = !!ad;
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [advertisers, setAdvertisers] = useState<Array<{ id: number; name: string }>>([]);
 
   const {
     register,
@@ -70,8 +71,7 @@ const AdModal: React.FC<AdModalProps> = ({
       media_type: 'image',
       content_url: '',
       duration_seconds: 10,
-      advertiser_name: '',
-      advertiser_contact: '',
+      advertiser_id: 0,
     },
   });
 
@@ -81,14 +81,21 @@ const AdModal: React.FC<AdModalProps> = ({
   // Reset form when modal opens/closes or ad changes
   useEffect(() => {
     if (isOpen) {
+      // load advertisers for dropdown
+      advertisersApi.getAdvertisers()
+        .then((res) => {
+          const data = (res as any).data ?? res;
+          setAdvertisers(Array.isArray(data) ? data : []);
+        })
+        .catch(() => setAdvertisers([]));
+
       if (ad) {
         reset({
           title: ad.title,
           media_type: ad.media_type,
           content_url: ad.content_url,
           duration_seconds: ad.duration_seconds,
-          advertiser_name: ad.advertiser_name || '',
-          advertiser_contact: ad.advertiser_contact || '',
+          advertiser_id: ad.advertiser?.id ?? 0,
         });
       } else {
         reset({
@@ -96,8 +103,7 @@ const AdModal: React.FC<AdModalProps> = ({
           media_type: 'image',
           content_url: '',
           duration_seconds: 10,
-          advertiser_name: '',
-          advertiser_contact: '',
+          advertiser_id: 0,
         });
       }
     }
@@ -273,25 +279,51 @@ const AdModal: React.FC<AdModalProps> = ({
               <Building2 className="h-4 w-4" />
               Advertiser Details
             </h4>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4 items-end">
               <div className="space-y-2">
-                <Label htmlFor="advertiser_name">Company/Name *</Label>
-                <Input
-                  id="advertiser_name"
-                  placeholder="e.g., Jazz Pakistan"
-                  {...register('advertiser_name')}
-                />
-                {errors.advertiser_name && (
-                  <p className="text-sm text-red-500">{errors.advertiser_name.message}</p>
+                <Label htmlFor="advertiser_id">Select Advertiser *</Label>
+                <div className="flex items-center gap-2">
+                  <select id="advertiser_id" className="flex-1 p-2 border rounded" {...register('advertiser_id', { valueAsNumber: true })}>
+                    <option value={0}>Select Advertiser</option>
+                    {advertisers.map((adv) => (
+                      <option key={adv.id} value={adv.id}>{adv.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="px-3 py-2 bg-green-600 text-white rounded"
+                    onClick={async () => {
+                      const name = window.prompt('Advertiser name');
+                      if (!name) return;
+                      const phone = window.prompt('Contact phone (optional)') || '';
+                      const email = window.prompt('Contact email (optional)') || '';
+                      try {
+                        const res = await advertisersApi.createAdvertiser({ advertiser_name: name, contact_phone: phone || undefined, contact_email: email || undefined });
+                        const created = (res as any).data ?? res;
+                        // refresh advertisers list
+                        const listRes = await advertisersApi.getAdvertisers();
+                        const list = (listRes as any).data ?? listRes;
+                        setAdvertisers(Array.isArray(list) ? list : []);
+                        // set newly created advertiser
+                        if (created && created.id) {
+                          setValue('advertiser_id', created.id);
+                        }
+                      } catch (e) {
+                        // ignore - quick flow
+                      }
+                    }}
+                    title="Create new advertiser"
+                  >
+                    +
+                  </button>
+                </div>
+                {errors.advertiser_id && (
+                  <p className="text-sm text-red-500">{errors.advertiser_id.message}</p>
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="advertiser_contact">Contact (Optional)</Label>
-                <Input
-                  id="advertiser_contact"
-                  placeholder="Email or phone"
-                  {...register('advertiser_contact')}
-                />
+                <Label>Contact</Label>
+                <p className="text-sm text-muted-foreground">Select an advertiser to view contact details in the advertiser management page.</p>
               </div>
             </div>
           </div>

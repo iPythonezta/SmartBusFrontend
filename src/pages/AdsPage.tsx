@@ -5,12 +5,12 @@ import { adsApi } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Image, Calendar, CheckCircle, Clock, Star, Pencil, Trash2, Youtube, Search, Building2 } from 'lucide-react';
+import { Plus, Image, Calendar, CheckCircle, Clock, Star, Pencil, Trash2, Youtube, Search, Building2, Eye } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useToast } from '@/components/ui/use-toast';
 import AdModal from '@/components/modals/AdModal';
 import AdScheduleModal from '@/components/modals/AdScheduleModal';
-import type { Advertisement, AdSchedule, CreateAdInput, CreateAdScheduleInput } from '@/types';
+import type { Advertisement, CreateAdInput, CreateAdScheduleInput } from '@/types';
 
 // Helper to get YouTube thumbnail
 const getYouTubeThumbnail = (url: string): string | null => {
@@ -33,7 +33,7 @@ const AdsPage: React.FC = () => {
   const [isAdModalOpen, setIsAdModalOpen] = useState(false);
   const [editingAd, setEditingAd] = useState<Advertisement | null>(null);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
-  const [editingSchedule, setEditingSchedule] = useState<AdSchedule | null>(null);
+  const [viewingScheduleId, setViewingScheduleId] = useState<number | null>(null);
   const [schedulingAdId, setSchedulingAdId] = useState<number | undefined>(undefined);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [deleteScheduleConfirmId, setDeleteScheduleConfirmId] = useState<number | null>(null);
@@ -57,7 +57,7 @@ const AdsPage: React.FC = () => {
     const query = searchQuery.toLowerCase();
     return ads.filter(ad => 
       ad.title.toLowerCase().includes(query) ||
-      ad.advertiser_name?.toLowerCase().includes(query) ||
+      (ad.advertiser?.name ?? '').toLowerCase().includes(query) ||
       ad.media_type.toLowerCase().includes(query)
     );
   }, [ads, searchQuery]);
@@ -116,19 +116,6 @@ const AdsPage: React.FC = () => {
     },
   });
 
-  const updateScheduleMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<AdSchedule> }) => adsApi.updateSchedule(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['ad-schedules'] });
-      setIsScheduleModalOpen(false);
-      setEditingSchedule(null);
-      toast({ title: 'Schedule Updated', description: 'Ad schedule has been updated successfully.' });
-    },
-    onError: () => {
-      toast({ title: 'Error', description: 'Failed to update schedule.', variant: 'destructive' });
-    },
-  });
-
   const deleteScheduleMutation = useMutation({
     mutationFn: (id: number) => adsApi.deleteSchedule(id),
     onSuccess: () => {
@@ -160,7 +147,6 @@ const AdsPage: React.FC = () => {
   };
 
   const handleScheduleAd = (adId: number) => {
-    setEditingSchedule(null);
     setSchedulingAdId(adId);
     setIsScheduleModalOpen(true);
   };
@@ -174,11 +160,7 @@ const AdsPage: React.FC = () => {
   };
 
   const handleScheduleModalSubmit = (data: CreateAdScheduleInput) => {
-    if (editingSchedule) {
-      updateScheduleMutation.mutate({ id: editingSchedule.id, data });
-    } else {
-      createScheduleMutation.mutate(data);
-    }
+    createScheduleMutation.mutate(data);
   };
 
   if (isLoading) {
@@ -340,12 +322,12 @@ const AdsPage: React.FC = () => {
                             variant="ghost"
                             size="sm"
                             onClick={() => {
-                              setEditingSchedule(schedule);
-                              setSchedulingAdId(undefined);
+                              setViewingScheduleId(schedule.id);
                               setIsScheduleModalOpen(true);
                             }}
+                            title="View schedule details"
                           >
-                            <Pencil className="h-4 w-4" />
+                            <Eye className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
@@ -426,10 +408,10 @@ const AdsPage: React.FC = () => {
                       <span className="text-xs">Duration: {ad.duration_seconds}s</span>
                     </div>
                     
-                    {ad.advertiser_name && (
+                    {ad.advertiser && (
                       <div className="flex items-center gap-2 text-muted-foreground">
                         <Building2 className="h-4 w-4" />
-                        <span className="text-xs">{ad.advertiser_name}</span>
+                        <span className="text-xs">{ad.advertiser.name}</span>
                       </div>
                     )}
                     
@@ -537,14 +519,15 @@ const AdsPage: React.FC = () => {
         isOpen={isScheduleModalOpen}
         onClose={() => {
           setIsScheduleModalOpen(false);
-          setEditingSchedule(null);
           setSchedulingAdId(undefined);
+          setViewingScheduleId(null);
         }}
         onSubmit={handleScheduleModalSubmit}
         ads={ads || []}
-        schedule={editingSchedule}
+        schedule={viewingScheduleId ? schedules?.find(s => s.id === viewingScheduleId) || null : null}
         preselectedAdId={schedulingAdId}
-        isLoading={createScheduleMutation.isPending || updateScheduleMutation.isPending}
+        isLoading={createScheduleMutation.isPending}
+        readOnly={!!viewingScheduleId}
       />
     </div>
   );
