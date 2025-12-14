@@ -265,8 +265,9 @@ const SMDSimulatorPage: React.FC = () => {
           duration: ANNOUNCEMENT_SLIDE_DURATION,
         };
         // Insert after first route
+        // Check if there is even first route
         newSlides.splice(1, 0, announcementSlide);
-        
+
         // Add more announcements if we have them
         for (let i = 1; i < nonEmergencyAnnouncements.length; i++) {
           newSlides.push({
@@ -344,7 +345,8 @@ const SMDSimulatorPage: React.FC = () => {
         }
       }
     } else {
-      // Currently showing content
+
+      
       const nextContentIndex = currentContentIndex + 1;
       
       if (nextContentIndex >= contentSlides.length) {
